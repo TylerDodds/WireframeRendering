@@ -135,3 +135,5 @@ results, particularly for non-straight edges or for Fresnel calculations.
 Requires wireframe edges to belong to only one triangle. In practical terms,
 this means that vertices of these edges must be considered logically distinct,
 whether split through sharp angle / edge splitting, uv or other seams, etc.
+This may also require ensure at least one subdivision of each surface of the
+model.

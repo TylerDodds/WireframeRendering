@@ -8,6 +8,7 @@
   {
     "com.unity.render-pipelines.universal": "10.8.1"
   },
+  "documentationUrl" : "https://github.com/TylerDodds/WireframeRendering/blob/main/Documentation~/wireframe-rendering.md",
   "author" :
   {
 	"name" : "Tyler Dodds",
