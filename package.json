@@ -1,0 +1,16 @@
+{
+  "name": "com.pixelinearaccelerator.wireframe-rendering",
+  "description": "Wireframe Rendering mesh processing and Renderer Feature for URP.",
+  "version": "0.1.0",
+  "unity": "2020.3",
+  "displayName": "Wireframe Rendering",
+  "dependencies": 
+  {
+    "com.unity.render-pipelines.universal": "10.8.1"
+  },
+  "author" :
+  {
+	"name" : "Tyler Dodds",
+	"url" : "https://github.com/TylerDodds"
+  }
+}

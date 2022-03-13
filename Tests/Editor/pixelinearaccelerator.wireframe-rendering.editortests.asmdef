@@ -1,0 +1,21 @@
+{
+    "name": "pixelinearaccelerator.wireframe-rendering.EditorTests",
+    "rootNamespace": "PixelinearAccelerator.WireframeRendering.EditorTests",
+    "references": [
+        "GUID:d9916cc7138406c46b1c7bebf41618d9"
+    ],
+	"optionalUnityReferences": [
+		"TestAssemblies"
+	],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
