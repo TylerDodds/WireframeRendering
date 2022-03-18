@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: © 2022 Tyler Dodds
 
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using UnityEngine;
 
@@ -26,12 +27,25 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
 
             if (boundaryEdgeCycle != null)
             {
-                return GetBoundaryCycleEdgeGroups(boundaryEdgeCycle);
+                BoundaryGrouping boundaryGrouping = TriangleGroupUtilities.GetBoundaryGrouping(decoupledGrouping, boundaryEdgeCycle);
+                EdgeGroupResults edgeGroupResults = GetBoundaryCycleEdgeGroups(boundaryEdgeCycle, boundaryGrouping, meshInformation);
+                if(!edgeGroupResults.HasValue)
+                {
+                    if (edgeGroupResults.CalculationTimedOut)
+                    {
+                        raiseWarning($"From a boundary cycle containing {boundaryGrouping.Edges.Count} edges, no texture labels were assignable within {edgeGroupResults.TimeoutSeconds} seconds.");
+                    }
+                    else
+                    {
+                        raiseWarning($"From a boundary cycle containing {boundaryGrouping.Edges.Count} edges, no texture labels were assignable under any conditions.");
+                    }
+                }
+                return edgeGroupResults.EdgeGroups;
             }
             else
             {
-                raiseWarning("Boundary edges do not form a loop. Attempting to assign wireframe coordinates in this unsupported case.");
-                return GetEdgeGroupsWhenNoBoundaryCycle(decoupledGrouping, meshInformation);
+                raiseWarning("Boundary edges do not form a loop. Cannot assign wireframe coordinates in this unsupported case.");
+                return null;
             }
         }
 
@@ -60,8 +74,10 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// Gets groups of edges with the same <see cref="TextureLabel"/>.
         /// </summary>
         /// <param name="boundaryEdgeCycle">The <see cref="BoundaryEdgeCycle"/> representing a loop of boundary <see cref="Edge"/>s.</param>
+        /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
+        /// <param name="meshInformation">The mesh information.</param>
         /// <returns>The set of <see cref="IEdgeGroup"/>s.</returns>
-        internal static IReadOnlyList<IEdgeGroup> GetBoundaryCycleEdgeGroups(BoundaryEdgeCycle boundaryEdgeCycle)
+        internal static EdgeGroupResults GetBoundaryCycleEdgeGroups(BoundaryEdgeCycle boundaryEdgeCycle, BoundaryGrouping boundaryGrouping, MeshInformation meshInformation)
         {
             List<Edge> boundaryEdges = boundaryEdgeCycle.Edges;
 
@@ -70,9 +86,9 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             List<GroupCutIndex> groupCutEdgeIndices = boundaryEdgeCycle.SharedTriangleIndices.Select(index => new GroupCutIndex(index, GroupCutType.SameTriangle))
                 .Concat(boundaryEdgeCycle.AngleDifferenceIndices.Select(indexAndAngle => new GroupCutIndex(indexAndAngle.index, GroupCutType.EdgeAngle))).OrderBy(p => p.EdgeIndex).ToList();
 
-            List<EdgeGroup> edgeGroups = GetEdgeGroups(boundaryEdges, groupCutEdgeIndices);
+            EdgeGroupResults edgeGroups = GetEdgeGroupsIncludingVirtualCuts(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation);
 
-            while(edgeGroups == null && groupCutEdgeIndices.Count > 0)
+            while(!edgeGroups.HasValue && !edgeGroups.CalculationTimedOut && groupCutEdgeIndices.Count > 0)
             {
                 int edgeIndexToRemove = GetEdgeIndexToRemove(groupCutEdgeIndices, edgeIndexToEdgeAngleDictionary);
                 int numElementsRemoved = groupCutEdgeIndices.RemoveAll(value => value.EdgeIndex == edgeIndexToRemove);
@@ -81,12 +97,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                     throw new System.InvalidOperationException($"Did not find a {nameof(EdgeGroup)} cut to remove from the {groupCutEdgeIndices.Count} possible.");
                 }
 
-                edgeGroups = GetEdgeGroups(boundaryEdges, groupCutEdgeIndices);
-            }
-
-            if (edgeGroups == null)
-            {
-                throw new System.InvalidOperationException($"From a boundary cycle containing {boundaryEdges.Count} edges, no texture labels were assignable under any conditions.");
+                edgeGroups = GetEdgeGroupsIncludingVirtualCuts(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation);
             }
 
             return edgeGroups;
@@ -105,12 +116,12 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             Vector2Int GetNeighbouringGroupSizes(int edgeIndex)
             {
                 int indexInGroupCutEdgeIndices = groupCutEdgeIndices.FindIndex(pair => pair.EdgeIndex == edgeIndex);
-                int indexOneAfterCyclic = GetIndexPeriodic(indexInGroupCutEdgeIndices + 1, groupCutEdgeIndicesCount);
-                int indexOneBeforeCyclic = GetIndexPeriodic(indexInGroupCutEdgeIndices - 1, groupCutEdgeIndicesCount);
+                int indexOneAfterCyclic = PeriodicUtilities.GetIndexPeriodic(indexInGroupCutEdgeIndices + 1, groupCutEdgeIndicesCount);
+                int indexOneBeforeCyclic = PeriodicUtilities.GetIndexPeriodic(indexInGroupCutEdgeIndices - 1, groupCutEdgeIndicesCount);
                 GroupCutIndex groupCutPrev = groupCutEdgeIndices[indexOneBeforeCyclic];
                 GroupCutIndex groupCutNext = groupCutEdgeIndices[indexOneAfterCyclic];
-                int groupSizePrev = GetIndexDistance(groupCutPrev.EdgeIndex, edgeIndex, groupCutEdgeIndicesCount);
-                int groupSizeNext = GetIndexDistance(edgeIndex, groupCutNext.EdgeIndex, groupCutEdgeIndicesCount);
+                int groupSizePrev = PeriodicUtilities.GetIndexDistance(groupCutPrev.EdgeIndex, edgeIndex, groupCutEdgeIndicesCount);
+                int groupSizeNext = PeriodicUtilities.GetIndexDistance(edgeIndex, groupCutNext.EdgeIndex, groupCutEdgeIndicesCount);
                 return new Vector2Int(groupSizePrev, groupSizeNext);
             }
             int NumberOfOneSizedGroupsRemoved(int edgeIndex)
@@ -132,13 +143,17 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                     .ThenBy(values => GetTotalNeighbouringGroupSizes(values.EdgeIndex))
                     .First().EdgeIndex;
             }
-            else
+            else if(_removeSameTriangleGroupCuts)
             {
                 //At least one left of GroupCutType.SameTriangle
                 edgeIndexToRemove = groupCutEdgeIndices
                     .OrderByDescending(values => NumberOfOneSizedGroupsRemoved(values.EdgeIndex))
                     .ThenBy(values => GetTotalNeighbouringGroupSizes(values.EdgeIndex))
                     .First().EdgeIndex;
+            }
+            else
+            {
+                edgeIndexToRemove = -1;
             }
             return edgeIndexToRemove;
         }
@@ -148,17 +163,20 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// </summary>
         /// <param name="boundaryEdges">The list of boundary <see cref="Edge"/>s in a cycle.</param>
         /// <param name="groupCutEdgeIndices">The set of indices where <see cref="GroupCutType"/> are assigned to boundary loop edges.</param>
+        /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
+        /// <param name="meshInformation">The <see cref="MeshInformation"/.></param>
         /// <param name="edgeGroups">The set of <see cref="EdgeGroup"/>s.</param>
         /// <param name="groupCuts">The <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
-        private static void GetEdgeGroupsAndGroupCutTypes(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts)
+        /// <param name="vertexEdgeGroupIndicesDictionary">Dictionary mapping vertices' connected edges to their indices in <paramref name="edgeGroups"/> (if boundary edges).</param>
+        private static void GetEdgeGroupsAndGroupCutTypes(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, BoundaryGrouping boundaryGrouping, MeshInformation meshInformation, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts, out Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary)
         {
             bool anyCuts = groupCutEdgeIndices.Any();
             int boundaryEdgesCount = boundaryEdges.Count;
             List<int> groupSizes = anyCuts ?
-                groupCutEdgeIndices.Zip(groupCutEdgeIndices.Prepend(groupCutEdgeIndices.Last()), (next, prev) => GetIndexDistance(prev.EdgeIndex, next.EdgeIndex, boundaryEdgesCount)).ToList()
+                groupCutEdgeIndices.Zip(groupCutEdgeIndices.Prepend(groupCutEdgeIndices.Last()), (next, prev) => PeriodicUtilities.GetIndexDistance(prev.EdgeIndex, next.EdgeIndex, boundaryEdgesCount)).ToList()
                 : new List<int> { boundaryEdgesCount };
 
-            int[] startIndices = anyCuts ? groupCutEdgeIndices.Select(i => GetIndexPeriodic(i.EdgeIndex + 1, boundaryEdgesCount)).OrderBy(i => i).ToArray() : new int[] { 0 };
+            int[] startIndices = anyCuts ? groupCutEdgeIndices.Select(i => PeriodicUtilities.GetIndexPeriodic(i.EdgeIndex + 1, boundaryEdgesCount)).OrderBy(i => i).ToArray() : new int[] { 0 };
             groupCuts = anyCuts ? groupCutEdgeIndices.Select(pair => pair.CutType).ToList() : new List<GroupCutType>() { GroupCutType.Virtual};
 
             //Build edge groups, but we don't need to include Connections here, since they're guaranteed by the order of the cycle.
@@ -174,6 +192,38 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 }
                 edgeGroups.Add(group);
             }
+
+            vertexEdgeGroupIndicesDictionary = new Dictionary<int, List<int>>();
+
+            HashSet<int> distinctVertexIndicesOfTrianglesOnEdges = boundaryGrouping.VertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges;
+            if (distinctVertexIndicesOfTrianglesOnEdges.Any())
+            {
+                Dictionary<Edge, int> edgeGroupIndices = new Dictionary<Edge, int>();
+                for (int edgeGroupIndex = 0; edgeGroupIndex < edgeGroups.Count; edgeGroupIndex++)
+                {
+                    EdgeGroup edgeGroup = edgeGroups[edgeGroupIndex];
+                    foreach (Edge edge in edgeGroup.Edges)
+                    {
+                        edgeGroupIndices[edge] = edgeGroupIndex;
+                    }
+                }
+
+                foreach (int vertexIndex in distinctVertexIndicesOfTrianglesOnEdges)
+                {
+                    List<int> edgeIndices = new List<int>();
+                    Vertex vertex = meshInformation.GetVertex(vertexIndex);
+                    foreach (Edge e in vertex)
+                    {
+                        if (edgeGroupIndices.ContainsKey(e))
+                        {
+                            edgeIndices.Add(edgeGroupIndices[e]);
+                        }
+                    }
+
+                    //By construction, there will always be edge indices
+                    vertexEdgeGroupIndicesDictionary[vertexIndex] = edgeIndices;
+                }
+            }
         }
 
         /// <summary>
@@ -181,25 +231,12 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// </summary>
         /// <param name="boundaryEdges">The list of boundary <see cref="Edge"/>s in a cycle.</param>
         /// <param name="groupCutEdgeIndices">The set of indices where <see cref="GroupCutType"/> are assigned to boundary loop edges.</param>
+        /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
+        /// <param name="meshInformation">The mesh information.</param>
         /// <returns>A list of <see cref="EdgeGroup"/>s with <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="groupCutEdgeIndices"/>.</returns>
-        private static List<EdgeGroup> GetEdgeGroups(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices)
+        private static EdgeGroupResults GetEdgeGroupsIncludingVirtualCuts(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, BoundaryGrouping boundaryGrouping, MeshInformation meshInformation)
         {
-            List<EdgeGroup> edgeGroups = null;
-
-            if (edgeGroups == null)
-            {
-                edgeGroups = GetEdgeGroups(boundaryEdges, groupCutEdgeIndices, 2);
-            }
-            if (edgeGroups == null)
-            {
-                edgeGroups = GetEdgeGroups(boundaryEdges, groupCutEdgeIndices, 3);
-            }
-            if (edgeGroups == null)
-            {
-                edgeGroups = GetEdgeGroups(boundaryEdges, groupCutEdgeIndices, 4);
-            }
-
-            return edgeGroups;
+            return GetEdgeGroupsIncludingVirtualCuts(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation, 4);
         }
 
         /// <summary>
@@ -207,21 +244,22 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// </summary>
         /// <param name="boundaryEdges">The list of boundary <see cref="Edge"/>s in a cycle.</param>
         /// <param name="groupCutEdgeIndices">The set of indices where <see cref="GroupCutType"/> are assigned to boundary loop edges.</param>
+        /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
+        /// <param name="meshInformation">The mesh information.</param>
         /// <param name="maxNumLabels">The maximum number of <see cref="TextureLabel"/> values (# of uv coordinates) to use.</param>
         /// <returns>A list of <see cref="EdgeGroup"/>s with <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/>.</returns>
-        private static List<EdgeGroup> GetEdgeGroups(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, int maxNumLabels)
+        private static EdgeGroupResults GetEdgeGroupsIncludingVirtualCuts(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, BoundaryGrouping boundaryGrouping, MeshInformation meshInformation, int maxNumLabels)
         {
-
-            GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts);
-            List<TextureLabel> textureLabels = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, maxNumLabels);
+            GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts, out Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary);
+            EdgeTextureLabelBacktracking.BacktrackResults backtrackResults = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, vertexEdgeGroupIndicesDictionary, boundaryGrouping, maxNumLabels);
             int numBoundaryEdges = boundaryEdges.Count;
 
-            if(textureLabels == null)
+            if (!backtrackResults.HasResult)
             {
                 groupCutEdgeIndices = new List<GroupCutIndex>(groupCutEdgeIndices);//Need to clone so that original group isn't affected
             }
 
-            while (textureLabels == null && groupCutEdgeIndices.Count <= numBoundaryEdges)
+            while (!backtrackResults.HasResult && groupCutEdgeIndices.Count <= numBoundaryEdges)
             {
                 int numGroupCutIndices = groupCutEdgeIndices.Count;
                 if (numGroupCutIndices == 0)
@@ -231,12 +269,12 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 }
                 else if (numGroupCutIndices == 1)
                 {
-                    groupCutEdgeIndices.Add(new GroupCutIndex(GetIndexPeriodic(groupCutEdgeIndices[0].EdgeIndex + 2, numBoundaryEdges), GroupCutType.Virtual));
+                    groupCutEdgeIndices.Add(new GroupCutIndex(PeriodicUtilities.GetIndexPeriodic(groupCutEdgeIndices[0].EdgeIndex + 2, numBoundaryEdges), GroupCutType.Virtual));
                 }
                 else
                 {
-                    bool addedGroupCutEdgeIndex = TryAddBestVirtualGroupCut(groupCutEdgeIndices, numBoundaryEdges);
-                    if(!addedGroupCutEdgeIndex)
+                    bool addedGroupCutEdgeIndex = TryAddBestVirtualGroupCut(groupCutEdgeIndices, numBoundaryEdges, backtrackResults.RejectedAnyBasedOnTriangles);
+                    if (!addedGroupCutEdgeIndex)
                     {
                         break;
                     }
@@ -244,21 +282,22 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
 
                 //NB Need to reorder groupCutIndices, and note that groups will always start at zero, since it should always have cut at the last index (no matter which are added)
                 groupCutEdgeIndices.Sort((first, second) => first.EdgeIndex.CompareTo(second.EdgeIndex));
-                GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, out edgeGroups, out groupCuts);
-                textureLabels = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, maxNumLabels);
+                GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation, out edgeGroups, out groupCuts, out vertexEdgeGroupIndicesDictionary);
+                backtrackResults = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, vertexEdgeGroupIndicesDictionary, boundaryGrouping, maxNumLabels);
             }
 
-            if(textureLabels != null)
+            if (backtrackResults.HasResult)
             {
-                for (int i = 0; i < textureLabels.Count; i++)
+                List<TextureLabel> labels = backtrackResults.Labels;
+                for (int i = 0; i < labels.Count; i++)
                 {
-                    edgeGroups[i].TextureLabel = textureLabels[i];
+                    edgeGroups[i].TextureLabel = labels[i];
                 }
-                return edgeGroups;
+                return new EdgeGroupResults(edgeGroups);
             }
             else
             {
-                return null;
+                return new EdgeGroupResults(backtrackResults.RejectedBasedOnTimeout, backtrackResults.RejectionTimeoutSeconds);
             }
         }
 
@@ -267,19 +306,24 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// </summary>
         /// <param name="groupCutEdgeIndices">The set of indices where <see cref="GroupCutType"/> are assigned to boundary loop edges.</param>
         /// <param name="numBoundaryEdges">The number of boundary edges.</param>
+        /// <param name="addAnyVirtualCutsPossible">If any possible cuts should be added.</param>
         /// <returns>If a <see cref="GroupCutIndex"/> of <see cref="GroupCutType.Virtual"/> could be added.</returns>
-        private static bool TryAddBestVirtualGroupCut(List<GroupCutIndex> groupCutEdgeIndices, int numBoundaryEdges)
+        private static bool TryAddBestVirtualGroupCut(List<GroupCutIndex> groupCutEdgeIndices, int numBoundaryEdges, bool addAnyVirtualCutsPossible)
         {
             int numGroupCutIndices = groupCutEdgeIndices.Count;
+            if(numGroupCutIndices < 2)
+            {
+                throw new System.ArgumentException($"{nameof(groupCutEdgeIndices)} should have at least two entries in {nameof(TryAddBestVirtualGroupCut)}, {numGroupCutIndices} given.");
+            }
             List<(GroupCutIndex ChosenCut, int Distance, bool NextNeighbourChosen)> relevantCutDistanceAndNext = new List<(GroupCutIndex, int, bool)>();
             GroupCutIndex prev = groupCutEdgeIndices.Last();
             GroupCutIndex curr = groupCutEdgeIndices[0];
-            int prevDistance = GetIndexDistance(prev.EdgeIndex, curr.EdgeIndex, numBoundaryEdges);
+            int prevDistance = PeriodicUtilities.GetIndexDistance(prev.EdgeIndex, curr.EdgeIndex, numBoundaryEdges);
             for (int i = 0; i < numGroupCutIndices; i++)
             {
-                int indexOfNextGroupCut = GetIndexPeriodic(i + 1, numGroupCutIndices);
+                int indexOfNextGroupCut = PeriodicUtilities.GetIndexPeriodic(i + 1, numGroupCutIndices);
                 GroupCutIndex next = groupCutEdgeIndices[indexOfNextGroupCut];
-                int nextDistance = GetIndexDistance(curr.EdgeIndex, next.EdgeIndex, numBoundaryEdges);
+                int nextDistance = PeriodicUtilities.GetIndexDistance(curr.EdgeIndex, next.EdgeIndex, numBoundaryEdges);
 
                 if (next.CutType == GroupCutType.Virtual && prev.CutType != GroupCutType.Virtual && prevDistance > 1)
                 {
@@ -304,49 +348,66 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 prevDistance = nextDistance;
             }
 
-            (GroupCutIndex Cut, GroupCutIndex ChosenCut, int Distance, bool NextNeighbourChosen) cutToAddNear = groupCutEdgeIndices
+            //Note that we only care about pairs with Distance > 1, since the rest already have two neighbouring cuts of Distance 1
+            IEnumerable<(GroupCutIndex Cut, GroupCutIndex ChosenCut, int Distance, bool NextNeighbourChosen)> cutsAndDistancesPaired = groupCutEdgeIndices
                 .Zip(relevantCutDistanceAndNext, (groupCutIndex, chosen) => (Cut: groupCutIndex, chosen.ChosenCut, chosen.Distance, chosen.NextNeighbourChosen))
-                .Aggregate((Cut: new GroupCutIndex(-1, GroupCutType.Virtual), ChosenCut: new GroupCutIndex(-1, GroupCutType.Virtual), Distance: int.MaxValue, NextChosen: false),
+                .Where(pair => pair.Distance > 1);
+
+            bool added = false;
+            if (cutsAndDistancesPaired.Any())
+            {
+                (GroupCutIndex Cut, GroupCutIndex ChosenCut, int Distance, bool NextNeighbourChosen) cutToAddNear = cutsAndDistancesPaired
+                .Aggregate((Cut: new GroupCutIndex(-1, GroupCutType.Virtual), ChosenCut: new GroupCutIndex(-1, GroupCutType.Virtual), Distance: -1, NextChosen: false),
                     (min, next) => min.Cut.CutType == GroupCutType.Virtual && next.Cut.CutType != GroupCutType.Virtual ? next :
                         min.ChosenCut.CutType == GroupCutType.Virtual && next.ChosenCut.CutType != GroupCutType.Virtual ? next :
                         next.Distance > min.Distance ? next : min);
 
-            bool added = false;
-            if (cutToAddNear.Cut.CutType == GroupCutType.Virtual && cutToAddNear.ChosenCut.CutType == GroupCutType.Virtual)
-            {
-                //If best cut is towards another virtual cut, adding another label to the group in between won't affect any non-Virtual GroupCutType restrictions
-            }
-            else if (cutToAddNear.Distance < 2)
-            {
-                //Nothing to do if the cut is a neighbour!
+                if (!addAnyVirtualCutsPossible && cutToAddNear.Cut.CutType == GroupCutType.Virtual && cutToAddNear.ChosenCut.CutType == GroupCutType.Virtual)
+                {
+                    //If best cut is towards another virtual cut, adding another label to the group in between won't affect any non-Virtual GroupCutType restrictions
+                }
+                else
+                {
+                    int distanceToCut = Mathf.Min(2, cutToAddNear.Distance - 1);
+                    int cutIndex = PeriodicUtilities.GetIndexPeriodic(cutToAddNear.Cut.EdgeIndex + (cutToAddNear.NextNeighbourChosen ? distanceToCut : -distanceToCut), numBoundaryEdges);
+                    groupCutEdgeIndices.Add(new GroupCutIndex(cutIndex, GroupCutType.Virtual));
+                    added = true;
+                }
             }
             else
             {
-                int distanceToCut = Mathf.Min(2, cutToAddNear.Distance - 1);
-                int cutIndex = GetIndexPeriodic(cutToAddNear.Cut.EdgeIndex + (cutToAddNear.NextNeighbourChosen ? distanceToCut : -distanceToCut), numBoundaryEdges);
-                groupCutEdgeIndices.Add(new GroupCutIndex(cutIndex, GroupCutType.Virtual));
-                added = true;
+                //There were no cuts left that have any neighbors that are not cuts, so nothing else to add, even if addCutsBetweenVirtualCuts
             }
+
             return added;
         }
 
         /// <summary>
-        /// Gets a list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/> with a fixed set of <paramref name="groupCuts"/>.
+        /// Gets <see cref="BacktrackResults"/> with a list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/> with a fixed set of <paramref name="groupCuts"/>.
         /// </summary>
         /// <param name="edgeGroups">The set of <see cref="EdgeGroup"/>s.</param>
         /// <param name="groupCuts">The <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
+        /// <param name="vertexEdgeGroupIndicesDictionary">Dictionary mapping vertices' connected edges to their indices in <paramref name="edgeGroups"/> (if boundary edges).</param>
+        /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
         /// <param name="maxNumLabels">The maximum number of <see cref="TextureLabel"/> values (# of uv coordinates) to use.</param>
-        /// <returns>A list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/>.</returns>
-        private static List<TextureLabel> GetTextureLabelsForFixedGroupCuts(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, int maxNumLabels)
+        /// <returns><see cref="BacktrackResults"/> with a list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/>.</returns>
+        private static EdgeTextureLabelBacktracking.BacktrackResults GetTextureLabelsForFixedGroupCuts(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary, BoundaryGrouping boundaryGrouping, int maxNumLabels)
         {
-
             List<TextureLabel> textureLabels = GroupSizesAtLeastTwoTextureLabels(edgeGroups, maxNumLabels);
-            if (textureLabels == null)
+            EdgeTextureLabelBacktracking.BacktrackResults backtrackResults = new EdgeTextureLabelBacktracking.BacktrackResults(textureLabels, false);
+            if (backtrackResults.HasResult)
             {
-                textureLabels = BacktrackTextureLabels(edgeGroups, groupCuts, maxNumLabels, new List<TextureLabel>() { TextureLabel.First });
+                backtrackResults.RejectedAnyBasedOnTriangles = EdgeTextureLabelBacktracking.BacktrackRejectIfTriangleHasAllOneLabel(edgeGroups, groupCuts, textureLabels, vertexEdgeGroupIndicesDictionary, boundaryGrouping);
             }
 
-            return textureLabels;
+            if (!backtrackResults.HasResult)
+            {
+                Stopwatch stopwatch = new Stopwatch();
+                stopwatch.Start();
+                backtrackResults = EdgeTextureLabelBacktracking.BacktrackTextureLabels(edgeGroups, groupCuts, vertexEdgeGroupIndicesDictionary, boundaryGrouping, maxNumLabels, new List<TextureLabel>() { TextureLabel.First }, stopwatch);
+            }
+
+            return backtrackResults;
         }
 
         /// <summary>
@@ -377,138 +438,6 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         }
 
         /// <summary>
-        /// Performs backtracking search to get a <see cref="TextureLabel"/> assignment for the <paramref name="edgeGroups"/> that satisfies the constraints.
-        /// </summary>
-        /// <param name="edgeGroups">The <see cref="EdgeGroup"/>s of the boundary cycle, in order.</param>
-        /// <param name="groupCuts">The type of <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
-        /// <param name="maxNumLabels">The maximum number of <see cref="TextureLabel"/> values (# of uv coordinates) to use.</param>
-        /// <param name="partial">The partial solution assigning a <see cref="TextureLabel"/> to each <see cref="EdgeGroup"/>.</param>
-        /// <returns>A list of <see cref="TextureLabel"/> per <see cref="EdgeGroup"/>, if one satisfies the constraints.</returns>
-        private static List<TextureLabel> BacktrackTextureLabels(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, int maxNumLabels, List<TextureLabel> partial)
-        {
-            if(BacktrackRejectTextureLabels(edgeGroups, groupCuts, partial))
-            {
-                return null;
-            }
-            else if(BacktrackAcceptTextureLabelsIfNotRejected(edgeGroups, partial))
-            {
-                return partial;
-            }
-            else
-            {
-                List<TextureLabel> extension = BacktrackGenerateFirstExtension(edgeGroups, partial);
-                while(extension != null)
-                {
-                    List<TextureLabel> backTracked = BacktrackTextureLabels(edgeGroups, groupCuts, maxNumLabels, extension);
-                    if(backTracked != null)
-                    {
-                        return backTracked;
-                    }
-                    extension = BacktrackGenerateNextExtension(maxNumLabels, extension);
-                }
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Gets an extension of <paramref name="partial"/> with an additional <see cref="TextureLabel"/>, unless one is assigned for each of the <paramref name="edgeGroups"/>.
-        /// </summary>
-        /// <param name="edgeGroups">The <see cref="EdgeGroup"/>s of the boundary cycle, in order.</param>
-        /// <param name="partial">The partial solution assigning a <see cref="TextureLabel"/> to each <see cref="EdgeGroup"/>.</param>
-        /// <returns>An extension of <paramref name="partial"/> with an additional <see cref="TextureLabel"/>, unless one is assigned for each of the <paramref name="edgeGroups"/>.</returns>
-        private static List<TextureLabel> BacktrackGenerateFirstExtension(List<EdgeGroup> edgeGroups, List<TextureLabel> partial)
-        {
-            return partial.Count <= edgeGroups.Count ? partial.Append(TextureLabel.First).ToList() : null;
-        }
-
-        /// <summary>
-        /// Return an alteration of <paramref name="partial"/> with a different <see cref="TextureLabel"/> at the last entry.
-        /// </summary>
-        /// <param name="maxNumLabels">The maximum number of <see cref="TextureLabel"/> values (# of uv coordinates) to use.</param>
-        /// <param name="partial">The partial solution assigning a <see cref="TextureLabel"/> to each <see cref="EdgeGroup"/>.</param>
-        /// <returns>An alteration of <paramref name="partial"/> with a different <see cref="TextureLabel"/> at the last entry.</returns>
-        private static List<TextureLabel> BacktrackGenerateNextExtension(int maxNumLabels, List<TextureLabel> partial)
-        {
-            TextureLabel lastLabel = partial[partial.Count - 1];
-            if((int)lastLabel < maxNumLabels)
-            {
-                List<TextureLabel> textureLabels = new List<TextureLabel>(partial);
-                textureLabels[textureLabels.Count - 1] = lastLabel + 1;
-                return textureLabels;
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Returns if the <paramref name="partial"/> solution should be rejected based on the constraints of the <paramref name="groupCuts"/>.
-        /// </summary>
-        /// <param name="edgeGroups">The <see cref="EdgeGroup"/>s of the boundary cycle, in order.</param>
-        /// <param name="groupCuts">The type of <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
-        /// <param name="partial">The partial solution assigning a <see cref="TextureLabel"/> to each <see cref="EdgeGroup"/>.</param>
-        /// <returns>If the <paramref name="partial"/> solution should be rejected based on the constraints of the <paramref name="groupCuts"/>.</returns>
-        private static bool BacktrackRejectTextureLabels(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, List<TextureLabel> partial)
-        {
-            bool reject = false;
-            int numEdgeGroups = edgeGroups.Count;
-            int numPartial = partial.Count;
-            for (int indexCurr = numPartial - 1; indexCurr >= 0; indexCurr--)
-            {
-                GroupCutType currentGroupCutType = groupCuts[indexCurr];
-                if(currentGroupCutType == GroupCutType.Virtual)
-                {
-                    //No restrictions on GroupCutType.Virtual
-                    continue;
-                }
-                TextureLabel label = partial[indexCurr];
-                int indexNext = GetIndexPeriodic(indexCurr + 1, numEdgeGroups);
-                //Labels on neighbouring groups must be different for any GroupCutType except GroupCutType.Virtual
-                if (indexNext < numPartial && partial[indexNext] == partial[indexCurr])
-                {
-                    return true;
-                }
-                if(currentGroupCutType == GroupCutType.SameTriangle)
-                {
-                    int indexPrev = GetIndexPeriodic(indexCurr - 1, numEdgeGroups);
-                    int indexAfterNext = GetIndexPeriodic(indexCurr + 2, numEdgeGroups);
-                    bool needTestPrev = indexPrev < numPartial && edgeGroups[indexCurr].Edges.Count < 2;
-                    indexPrev = needTestPrev ? indexPrev : indexCurr;
-                    bool needTestAfterNext = indexNext < numPartial && edgeGroups[indexNext].Edges.Count < 2;
-                    indexAfterNext = needTestAfterNext ? indexAfterNext : indexNext;
-                    //Set indexPrev, indexTwoGreater to indices of groups that hold the previous edge and edge after next, respectively
-                    //If the groups are the same then we'd already reject based on the direct neighbors test above
-
-                    if (indexPrev < numPartial && indexNext < numPartial && partial[indexPrev] == partial[indexNext])
-                    {
-                        return true;
-                    }
-                    if (indexAfterNext < numPartial && partial[indexAfterNext] == partial[indexCurr])
-                    {
-                        return true;
-                    }
-                    if (indexPrev < numPartial && indexAfterNext < numPartial && partial[indexAfterNext] == partial[indexPrev])
-                    {
-                        return true;
-                    }
-                }
-            }
-            return reject;
-        }
-
-        /// <summary>
-        /// Return if the list of labels <paramref name="partial"/> should be accepted, when it was not rejected as a partial match.
-        /// </summary>
-        /// <param name="edgeGroups">The <see cref="EdgeGroup"/>s of the boundary cycle, in order.</param>
-        /// <param name="partial">The partial solution assigning a <see cref="TextureLabel"/> to each <see cref="EdgeGroup"/>.</param>
-        /// <returns>If the list of labels <paramref name="partial"/> should be accepted.</returns>
-        private static bool BacktrackAcceptTextureLabelsIfNotRejected(List<EdgeGroup> edgeGroups, List<TextureLabel> partial)
-        {
-            return partial.Count == edgeGroups.Count;
-        }
-
-        /// <summary>
         /// Gets a <see cref="BoundaryEdgeCycle"/> from the boundary <see cref="Edge"/> of the <paramref name="decoupledGrouping"/> that belong to only one triangle.
         /// </summary>
         /// <param name="decoupledGrouping">A contiguous set of triangles and their edges.</param>
@@ -518,7 +447,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// <returns>A <see cref="BoundaryEdgeCycle"/>, if one exists; null otherwise.</returns>
         internal static BoundaryEdgeCycle GetBoundaryEdgeCycle(DecoupledGrouping decoupledGrouping, MeshInformation meshInformation, float angleCutoffDegrees, System.Action<string> raiseWarning)
         {
-            Dictionary<int, List<Edge>> edgesPerTriangleCount = new Dictionary<int, List<Edge>>();
+            Dictionary<int, HashSet<Edge>> edgesPerTriangleCount = new Dictionary<int, HashSet<Edge>>();
             foreach(Edge edge in decoupledGrouping.Edges)
             {
                 DictionaryUtil.AddListItem(edgesPerTriangleCount, edge.TriangleCount, edge);
@@ -529,26 +458,30 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             }
 
             BoundaryEdgeCycle boundaryEdgeCycle;
-            List<Edge> boundaryEdgesUnordered = edgesPerTriangleCount.ContainsKey(1) ? edgesPerTriangleCount[1] : null;
+            HashSet<Edge> boundaryEdgesUnordered = edgesPerTriangleCount.ContainsKey(1) ? edgesPerTriangleCount[1] : null;
             if (boundaryEdgesUnordered != null && boundaryEdgesUnordered.Count > 0)
             {
-                Edge startingEdge = boundaryEdgesUnordered[0];
+                Edge startingEdge = boundaryEdgesUnordered.First();
 
-                boundaryEdgeCycle = new BoundaryEdgeCycle()
-                {
-                    Edges = new List<Edge>() { },
-                    SharedTriangleIndices = new List<int>(),
-                };
+                boundaryEdgeCycle = new BoundaryEdgeCycle();
 
                 Edge currEdge = startingEdge;
                 Edge prevEdge = currEdge;
                 int numBoundaryEdges = boundaryEdgesUnordered.Count;
+                HashSet<Edge> addedEdges = new HashSet<Edge>();
+
                 for(int i = 0; i < numBoundaryEdges; i++)
                 {
                     boundaryEdgeCycle.Edges.Add(currEdge);
+                    addedEdges.Add(currEdge);
                     Vertex vertexFirst = meshInformation.GetVertex(currEdge.FirstIndex);
                     Vertex vertexSecond = meshInformation.GetVertex(currEdge.SecondIndex);
-                    Edge[] connectedBoundaryEdges = vertexFirst.Concat(vertexSecond).Distinct().Where(e => e != currEdge && e != prevEdge && e.TriangleCount == 1).ToArray();
+                    //Note that in some cases there may be connected edges, but that don't form a triangle with the given edge, and so don't show up in the boundaryEdgesUnordered
+                    //Additionally, note that there may be cases where one of the potential edges was already added to the list, so we'd like to ignore those.
+                    Edge[] connectedBoundaryEdges = vertexFirst.Concat(vertexSecond).Distinct()
+                        .Where(e => e.TriangleCount == 1 && boundaryEdgesUnordered.Contains(e))
+                        .Where(e => !addedEdges.Contains(e) || (e == startingEdge && i == numBoundaryEdges - 1))
+                        .ToArray();
                     if (connectedBoundaryEdges.Length > 1 && currEdge != startingEdge)
                     {
                         //The set of connected boundary edges splits here, so we don't have a cycle.
@@ -589,7 +522,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                         currEdge = connectedEdge;
                     }
                 }
-                if(currEdge != startingEdge)
+                if(currEdge != startingEdge && boundaryEdgeCycle != null)
                 {
                     //Didn't get a full cycle connecting back to the first edge.
                     boundaryEdgeCycle = null;
@@ -608,239 +541,15 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 int indexOfShift = boundaryEdgeCycle.SharedTriangleIndices.Count > 0 ? boundaryEdgeCycle.SharedTriangleIndices[0] + 1 :
                                     boundaryEdgeCycle.AngleDifferenceIndices.Count > 0 ? boundaryEdgeCycle.AngleDifferenceIndices[0].index + 1 : 0;
                 int numBoundaryEdges = boundaryEdgeCycle.Edges.Count;
-                boundaryEdgeCycle.Edges = boundaryEdgeCycle.Edges.Select((edge, index) => (edge, index: GetIndexPeriodic(index - indexOfShift, numBoundaryEdges)))
+                boundaryEdgeCycle.Edges = boundaryEdgeCycle.Edges.Select((edge, index) => (edge, index: PeriodicUtilities.GetIndexPeriodic(index - indexOfShift, numBoundaryEdges)))
                     .OrderBy(p => p.index).Select(p => p.edge).ToList();
-                boundaryEdgeCycle.AngleDifferenceIndices = boundaryEdgeCycle.AngleDifferenceIndices.Select(i => (GetIndexPeriodic(i.index - indexOfShift, numBoundaryEdges), i.angle)).ToList();
+                boundaryEdgeCycle.AngleDifferenceIndices = boundaryEdgeCycle.AngleDifferenceIndices.Select(i => (PeriodicUtilities.GetIndexPeriodic(i.index - indexOfShift, numBoundaryEdges), i.angle)).ToList();
                 boundaryEdgeCycle.AngleDifferenceIndices.Sort();
-                boundaryEdgeCycle.SharedTriangleIndices = boundaryEdgeCycle.SharedTriangleIndices.Select(i => GetIndexPeriodic(i - indexOfShift,numBoundaryEdges)).ToList();
+                boundaryEdgeCycle.SharedTriangleIndices = boundaryEdgeCycle.SharedTriangleIndices.Select(i => PeriodicUtilities.GetIndexPeriodic(i - indexOfShift,numBoundaryEdges)).ToList();
                 boundaryEdgeCycle.SharedTriangleIndices.Sort();
             }
             return boundaryEdgeCycle;
         }
-
-        /// <summary>
-        /// Gets groups of edges with the same <see cref="TextureLabel"/>. Uses heuristic labelling in the case that the <paramref name="decoupledGrouping"/> boundary edges don't form a cycle.
-        /// </summary>
-        /// <param name="decoupledGrouping">A contiguous set of triangles and their edges.</param>
-        /// <param name="meshInformation">The mesh information.</param>
-        /// <returns>The set of <see cref="EdgeGroup"/>s.</returns>
-        private static List<EdgeGroup> GetEdgeGroupsWhenNoBoundaryCycle(DecoupledGrouping decoupledGrouping, MeshInformation meshInformation)
-        {
-            List<EdgeGroup> edgeGroups = new List<EdgeGroup>();
-            HashSet<Edge> processedEdges = new HashSet<Edge>();
-            foreach (Edge startingEdge in decoupledGrouping.Edges)
-            {
-                TraverseBoundaryNoCycle(startingEdge, null, edgeGroups, processedEdges, meshInformation);
-            }
-
-            HashSet<EdgeGroup> processedGroups = new HashSet<EdgeGroup>();
-            foreach (EdgeGroup edgeGroup in edgeGroups)
-            {
-                if (!processedGroups.Contains(edgeGroup))
-                {
-                    TraverseEdgeGroup(edgeGroup, TextureLabel.None, processedGroups);
-                }
-            }
-
-            return edgeGroups;
-        }
-
-        /// <summary>
-        /// Adds <see cref="EdgeGroup"/>s while traversing around a boundary edges.
-        /// </summary>
-        /// <param name="startingEdge">The edge to start traversing from.</param>
-        /// <param name="previousEdgeGroup">The previous <see cref="EdgeGroup"/> connected to <paramref name="startingEdge"/>.</param>
-        /// <param name="edgeGroups">The list of <see cref="EdgeGroup"/>.</param>
-        /// <param name="processed">The set of processed <see cref="Edge"/>s.</param>
-        /// <param name="meshInformation">The mesh information.</param>
-        private static void TraverseBoundaryNoCycle(Edge startingEdge, EdgeGroup previousEdgeGroup, List<EdgeGroup> edgeGroups, HashSet<Edge> processed, MeshInformation meshInformation)
-        {
-            if (!processed.Contains(startingEdge))
-            {
-                processed.Add(startingEdge);
-                int triangleCount = startingEdge.TriangleCount;
-
-                if (triangleCount == 1)
-                {
-                    EdgeGroup edgeGroup = previousEdgeGroup;
-                    if (edgeGroup == null)
-                    {
-                        edgeGroup = new EdgeGroup();
-                        edgeGroups.Add(edgeGroup);
-                    }
-                    edgeGroup.Edges.Add(startingEdge);
-
-                    Vertex vertexFirst = meshInformation.GetVertex(startingEdge.FirstIndex);
-                    Vertex vertexSecond = meshInformation.GetVertex(startingEdge.SecondIndex);
-                    Edge[] connectedBoundaryEdges = vertexFirst.Concat(vertexSecond).Distinct().Where(e => e != startingEdge && !processed.Contains(e) && e.TriangleCount == 1).ToArray();
-                    //NB Even if we expect only one edge here, we'll just continue traversing otherwise, since we're already in the unsupported case of no boundary edge cycle.
-                    foreach (Edge connectedEdge in connectedBoundaryEdges)
-                    {
-                        Triangle[] sharedTriangles = connectedEdge.Intersect(startingEdge).ToArray();
-                        Triangle intersectionTriangle = sharedTriangles.FirstOrDefault();
-                        //NB Although we expect at most one intersectionTriangle here, we'll just add an EdgeConnection based on the first, ignoring any doubled triangles, since we're already in the unsupported case of no boundary edge cycle.
-                        if (intersectionTriangle != null)
-                        {
-                            int intersectionVertex = startingEdge.GetIndices().Intersect(connectedEdge.GetIndices()).First();
-                            EdgeGroup newEdgeGroup = new EdgeGroup();
-                            edgeGroups.Add(newEdgeGroup);
-                            edgeGroup.Connections.Add(new EdgeConnection(startingEdge, meshInformation.GetVertex(intersectionVertex), intersectionTriangle, connectedEdge, newEdgeGroup));
-                            TraverseBoundaryNoCycle(connectedEdge, newEdgeGroup, edgeGroups, processed, meshInformation);
-                        }
-                        else
-                        {
-                            //NB note that we won't do ege-to-edge angle tests here, since we're already in the unsupported case of no boundary edge cycle.
-                            TraverseBoundaryNoCycle(connectedEdge, edgeGroup, edgeGroups, processed, meshInformation);
-                        }
-                    }
-                }
-                else if (triangleCount > 2)
-                {
-                    Debug.Log($"Edge from vertices {startingEdge.FirstIndex} to {startingEdge.SecondIndex} is found in {triangleCount} triangles. This is expected to be 1 for boundary and 2 for surface edges.");
-                }
-            }
-        }
-
-        /// <summary>
-        /// Traverses an <see cref="EdgeGroup"/>'s connections to assign <see cref="TextureLabel"/>s.
-        /// </summary>
-        /// <param name="edgeGroup">The <see cref="EdgeGroup"/>.</param>
-        /// <param name="connectedGroupLabel">The <see cref="TextureLabel"/> of the <see cref="EdgeGroup"/> connected to <paramref name="edgeGroup"/>.</param>
-        /// <param name="processed">The set of processed <see cref="EdgeGroup"/>s.</param>
-        private static void TraverseEdgeGroup(EdgeGroup edgeGroup, TextureLabel connectedGroupLabel, HashSet<EdgeGroup> processed)
-        {
-            AssignEdgeLabel(edgeGroup, connectedGroupLabel);
-
-            if (!processed.Contains(edgeGroup))
-            {
-                processed.Add(edgeGroup);
-                foreach (var c in edgeGroup.Connections)
-                {
-                    TraverseEdgeGroup(c.OtherGroup, edgeGroup.TextureLabel, processed);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Assigns a <see cref="TextureLabel"/> to an <see cref="EdgeGroup"/>.
-        /// </summary>
-        /// <param name="edgeGroup">The <see cref="EdgeGroup"/>.</param>
-        /// <param name="connectedGroupLabel">The <see cref="TextureLabel"/> of the <see cref="EdgeGroup"/> connected to <paramref name="edgeGroup"/>.</param>
-        private static void AssignEdgeLabel(EdgeGroup edgeGroup, TextureLabel connectedGroupLabel)
-        {
-            const TextureLabel baseCaseLabel = TextureLabel.First;
-            TextureLabel currentLabel = edgeGroup.TextureLabel;
-            if (connectedGroupLabel == TextureLabel.None)
-            {
-                if (currentLabel == TextureLabel.None)//Base case
-                {
-                    edgeGroup.TextureLabel = baseCaseLabel;
-                }
-                else
-                {
-                    throw new System.ArgumentException($"Edge group already has label {currentLabel}, but is being assigned label of {connectedGroupLabel}.", nameof(edgeGroup));
-                }
-            }
-            else
-            {
-                TextureLabel alternateLabel = GetAlternateLabel(connectedGroupLabel);
-                if (currentLabel == TextureLabel.None)
-                {
-                    edgeGroup.TextureLabel = alternateLabel;
-                }
-                else if (currentLabel == connectedGroupLabel)
-                {
-                    edgeGroup.TextureLabel = GetConflictLabel(connectedGroupLabel, alternateLabel);
-                }
-                else if (currentLabel == alternateLabel)
-                {
-                    //This group wants to be re-labelled with the same label, so there's nothing to do.
-                }
-                else
-                {
-                    //In this case, the current label is not equal to the otherGroupLabel, so we don't need ot change anything, even if it's not equal to what would be the alternateLabel.
-                }
-            }
-        }
-
-        /// <summary>
-        /// Gets the <see cref="TextureLabel"/> that is different from two labels.
-        /// </summary>
-        /// <param name="label1">The first label.</param>
-        /// <param name="label2">The second label.</param>
-        /// <returns>The <see cref="TextureLabel"/>.</returns>
-        private static TextureLabel GetConflictLabel(TextureLabel label1, TextureLabel label2)
-        {
-            bool inOrder = label1 <= label2;
-            TextureLabel first = inOrder ? label1 : label2;
-            TextureLabel second = inOrder ? label2 : label1;
-            TextureLabel ret = TextureLabel.None;
-            switch (first)
-            {
-                case TextureLabel.First:
-                    if (label2 == TextureLabel.Second)
-                    {
-                        ret = TextureLabel.Third;
-                    }
-                    else if (label2 == TextureLabel.Third)
-                    {
-                        ret = TextureLabel.Second;
-                    }
-                    break;
-                case TextureLabel.Second:
-                    if (label2 == TextureLabel.Third)
-                    {
-                        ret = TextureLabel.First;
-                    }
-                    break;
-            }
-            return ret;
-        }
-
-        /// <summary>
-        /// Gets the <see cref="TextureLabel"/> that alternates from the given label.
-        /// </summary>
-        /// <param name="textureLabel">The <see cref="TextureLabel"/>.</param>
-        /// <returns>The alternate <see cref="TextureLabel"/>.</returns>
-        private static TextureLabel GetAlternateLabel(TextureLabel textureLabel)
-        {
-            TextureLabel ret = TextureLabel.None;
-            switch (textureLabel)
-            {
-                case TextureLabel.None:
-                    ret = TextureLabel.None;
-                    break;
-                case TextureLabel.First:
-                    ret = TextureLabel.Second;
-                    break;
-                case TextureLabel.Second:
-                    ret = TextureLabel.First;
-                    break;
-                case TextureLabel.Third:
-                    ret = TextureLabel.First;
-                    break;
-            }
-            return ret;
-        }
-
-        /// <summary>
-        /// Get an <paramref name="index"/> wrapped cyclically to a given <paramref name="period"/>.
-        /// </summary>
-        /// <param name="index">The unwrapped index.</param>
-        /// <param name="period'">The period of wrapping.</param>
-        /// <returns>The wrapped index.</returns>
-        private static int GetIndexPeriodic(int index, int period) => (index + period) % period;
-
-        /// <summary>
-        /// Gets the periodically-wrapped distance from the <paramref name="first"/> index to the <paramref name="second"/>, 
-        /// where distance is measured by the number of increasing steps from <paramref name="first"/> to <paramref name="second"/>,
-        /// wrapping at the given <paramref name="period"/> if necessary.
-        /// </summary>
-        /// <param name="first">The first index.</param>
-        /// <param name="second">The second index.</param>
-        /// <param name="period'">The period of wrapping.</param>
-        /// <returns>The distance between indices.</returns>
-        private static int GetIndexDistance(int first, int second, int period) => second > first ? second - first : period - (first - second);
 
         /// <summary>
         /// Marks a delineation between groups at a given edge index and <see cref="GroupCutType"/>.
@@ -860,13 +569,8 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         }
 
         /// <summary>
-        /// Indices the reason for considering neighbouring edges to be of different groups for texture labeling reasons.
+        /// If <see cref="GroupCutType.SameTriangle"/> should be removed in the last attempts to find any sort of solution.
         /// </summary>
-        private enum GroupCutType
-        {
-            SameTriangle,
-            EdgeAngle,
-            Virtual,
-        }
+        private static readonly bool _removeSameTriangleGroupCuts = false;
     }
 }

@@ -70,7 +70,9 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             //Three or more triangles: edge is involved in the intersection of two surfaces. Mesh is clearly not watertight. This is probably unexpected in most cases.
 
             List<DecoupledGrouping> groupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(_meshInformation);
-            Dictionary<DecoupledGrouping, IReadOnlyList<IEdgeGroup>> edgeGroups = groupings.ToDictionary(g => g, g => EdgeTextureLabelUtilities.GetEdgeGroups(g, _meshInformation, angleCutoffDegrees, _raiseWarning));
+            Dictionary<DecoupledGrouping, IReadOnlyList<IEdgeGroup>> edgeGroups = groupings.ToDictionary(g => g, g => EdgeTextureLabelUtilities.GetEdgeGroups(g, _meshInformation, angleCutoffDegrees, _raiseWarning))
+                .Where(pair => pair.Value != null).ToDictionary(pair => pair.Key, pair => pair.Value);
+
             bool needThirdUvParameter = edgeGroups.Any(g => g.Value.Any(e => e.TextureLabel == TextureLabel.Third));
             bool needFourthUvParameter = edgeGroups.Any(g => g.Value.Any(e => e.TextureLabel == TextureLabel.Fourth));
 
@@ -80,7 +82,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 SetBoundaryUVs(edgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));
                 _meshInformation.Mesh.SetUVs(channel, uvs);
             }
-            else if(!needFourthUvParameter)
+            else if (!needFourthUvParameter)
             {
                 List<Vector3> uvs = GetUV3s(channel);
                 SetBoundaryUVs(edgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));

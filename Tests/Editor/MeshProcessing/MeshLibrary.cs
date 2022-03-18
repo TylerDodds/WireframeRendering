@@ -19,5 +19,10 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
         public Mesh Circle1;
         public Mesh TenSidedPoly1;
         public Mesh OneGroupCutEachType1;
+        public Mesh Circle2;
+        public Mesh CircleFan1;
+        public Mesh CircleFan2;
+        public Mesh CircleFan3;
+        public Mesh CircleFan4;
     }
 }

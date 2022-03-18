@@ -137,3 +137,7 @@ this means that vertices of these edges must be considered logically distinct,
 whether split through sharp angle / edge splitting, uv or other seams, etc.
 This may also require ensure at least one subdivision of each surface of the
 model.
+
+In some edge conditions (long boundary edge groups that contain many sharp
+angles, triangles containing two boundary edges, or triangles whose vertices
+all touch a boundary edge) calculation may be prohibitively expensive.

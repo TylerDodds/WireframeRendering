@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: © 2022 Tyler Dodds
 
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -116,6 +117,10 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         ///<summary>The third vertex index.</summary>
         public int Index3 { get; }
 
+        public Edge FirstEdge => _edges[0];
+        public Edge SecondEdge => _edges[1];
+        public Edge ThirdEdge => _edges[2];
+
         private Edge[] _edges = new Edge[3];
 
         /// <summary>
@@ -131,6 +136,24 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             Index2 = index2;
             Index3 = index3;
         }
+
+        /// <summary>
+        /// All <see cref="Edge"/>s that touch vertices of this triangle, but are not a part of it.
+        /// </summary>
+        internal IReadOnlyList<Edge> ConnectedEdges => _connectedEdges;
+
+        /// <summary>
+        /// Gets the indices of the triangle.
+        /// </summary>
+        /// <returns>The indices of the triangle.</returns>
+        public IEnumerable<int> GetIndices()
+        {
+            yield return Index1;
+            yield return Index2;
+            yield return Index3;
+            yield break;
+        }
+
 
         ///<summary>Gets the pairs of vertex indices of each edge, ordered so the smaller vertex index comes first.</summary>
         public (Vector2Int edge1, Vector2Int edge2, Vector2Int edge3) GetOrderedEdgesIndices()
@@ -162,6 +185,12 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             }
         }
 
+        internal void SetConnectedEdges(IEnumerable<Edge> connectedEdges)
+        {
+            _connectedEdges.Clear();
+            _connectedEdges.AddRange(connectedEdges);
+        }
+
         /// <summary>
         /// Gets a <see cref="Vector2Int"/> with the input integer indices <paramref name="a"/> and <paramref name="b"/> ordered.
         /// </summary>
@@ -188,6 +217,8 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         {
             return $"{Index1} {Index2} {Index3}";
         }
+
+        private List<Edge> _connectedEdges = new List<Edge>();
     }
 
     /// <summary>

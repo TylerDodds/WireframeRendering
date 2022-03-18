@@ -27,4 +27,21 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             Edges = edges;
         }
     }
+
+    /// <summary>
+    /// A grouping of boundary <see cref="Edges"/>, along with <see cref="Triangle"/>s (and their vertices) whose vertices all touch a boundary edge.
+    /// </summary>
+    internal class BoundaryGrouping
+    {
+        public HashSet<Triangle> TrianglesCompletelyTouchingBoundaryEdges;
+        public HashSet<int> VertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges;
+        public HashSet<Edge> Edges;
+
+        public BoundaryGrouping(HashSet<Edge> edges, HashSet<Triangle> trianglesCompletelyTouchingBoundaryEdges, HashSet<int> vertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges)
+        {
+            TrianglesCompletelyTouchingBoundaryEdges = trianglesCompletelyTouchingBoundaryEdges;
+            VertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges = vertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges;
+            Edges = edges;
+        }
+    }
 }

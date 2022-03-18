@@ -115,8 +115,29 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 TryAddEdge(edgeIndices3, EdgeIndex.Three);
                 _triangles.Add(triangle);
             }
-
-
+            HashSet<Edge> connectedEdges = new HashSet<Edge>();
+            foreach(Triangle triangle in _triangles)
+            {
+                connectedEdges.Clear();
+                void TryAddEdge(Edge e)
+                {
+                    if(!connectedEdges.Contains(e) && e != triangle.FirstEdge && e != triangle.SecondEdge && e != triangle.ThirdEdge)
+                    {
+                        connectedEdges.Add(e);
+                    }
+                }
+                void TryAddEdges(int vertexIndex)
+                {
+                    foreach(Edge e in _vertices[vertexIndex])
+                    {
+                        TryAddEdge(e);
+                    }
+                }
+                TryAddEdges(triangle.Index1);
+                TryAddEdges(triangle.Index2);
+                TryAddEdges(triangle.Index3);
+                triangle.SetConnectedEdges(connectedEdges);
+            }
         }
 
         /// <summary>

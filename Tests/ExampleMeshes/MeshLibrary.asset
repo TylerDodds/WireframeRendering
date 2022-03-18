@@ -20,3 +20,8 @@ MonoBehaviour:
   Circle1: {fileID: -876490656561179385, guid: 327b7bf108b3082479565575a10d628a, type: 3}
   TenSidedPoly1: {fileID: 4368059298116762220, guid: 4ba721f79835d20409400f7be59bd2b8, type: 3}
   OneGroupCutEachType1: {fileID: -2808869445283773527, guid: 97ac64a5ca0a8cf429bfa4cda995bccb, type: 3}
+  Circle2: {fileID: -786122504899417723, guid: 17387fa13b36c464c9a4eeb6f0bd774d, type: 3}
+  CircleFan1: {fileID: -6179908688987975231, guid: 7f4bd4e4cd4d4374ea58dc828bed5dc7, type: 3}
+  CircleFan2: {fileID: -6216953548358127524, guid: 9c022ed9a7f9824418b19f0a5c8741cb, type: 3}
+  CircleFan3: {fileID: -982817363203908187, guid: 421f872f2ab5bad40b5d5b763e4403b2, type: 3}
+  CircleFan4: {fileID: 4780463412968092265, guid: 86192db4d95772546a0223da1c606386, type: 3}

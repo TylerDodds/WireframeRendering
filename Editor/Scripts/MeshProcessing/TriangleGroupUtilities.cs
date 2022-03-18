@@ -50,5 +50,23 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             }
             return triangleGroupings;
         }
+
+        /// <summary>
+        /// Gets a <see cref="BoundaryGrouping"/> that includes triangles, and their vertices, whose vertices only touch boundary edges.
+        /// </summary>
+        /// <param name="decoupledGrouping">The <see cref="DecoupledGrouping"/> of triangles and edges.</param>
+        /// <param name="boundaryEdgeCycle">The <see cref="BoundaryEdgeCycle"/> of the <paramref name="decoupledGrouping"/></param>
+        /// <returns>The <see cref="BoundaryGrouping"/>.</returns>
+        internal static BoundaryGrouping GetBoundaryGrouping(DecoupledGrouping decoupledGrouping, BoundaryEdgeCycle boundaryEdgeCycle)
+        {
+            List<Edge> boundaryEdges = boundaryEdgeCycle.Edges;
+            HashSet<int> boundaryVertexIndices = new HashSet<int>(boundaryEdges.SelectMany(e => e.GetIndices()));
+            IEnumerable<Triangle> potentialTriangles = boundaryEdges.SelectMany(e => e).Distinct();
+            IEnumerable<Triangle> trianglesWithAllVerticesTouchingBoundaryEdges = potentialTriangles.Where(t => t.GetIndices().All(i => boundaryVertexIndices.Contains(i)));
+            IEnumerable<int> verticesOfTrianglesWithAllVerticesTouchingBoundaryEdges = trianglesWithAllVerticesTouchingBoundaryEdges.SelectMany(t => t.GetIndices()).Distinct();
+
+            BoundaryGrouping boundaryGrouping = new BoundaryGrouping(new HashSet<Edge>(boundaryEdges), new HashSet<Triangle>(trianglesWithAllVerticesTouchingBoundaryEdges), new HashSet<int>(verticesOfTrianglesWithAllVerticesTouchingBoundaryEdges));
+            return boundaryGrouping;
+        }
     }
 }
