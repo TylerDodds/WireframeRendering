@@ -228,7 +228,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         private bool GetIfShouldGenerateWireframeCoordinates(WireframeRenderingSettings wireframeRenderingSettings)
         {
             bool generateCoordinates = false;
-            if (assetImporter is ModelImporter modelImporter)
+            if (assetImporter is ModelImporter)
             {
                 if (wireframeRenderingSettings.AllowUserConfigurationOfUvGeneration)
                 {

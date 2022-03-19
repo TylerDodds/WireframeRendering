@@ -43,6 +43,12 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         internal HashSet<Edge> GetEdges() => new HashSet<Edge>(_edges.Values);
 
         /// <summary>
+        /// Gets the <see cref="Triangle"/>s of the mesh.
+        /// </summary>
+        /// <returns>The set of unique <see cref="Edge"/>.</returns>
+        internal HashSet<Triangle> GetTriangles() => new HashSet<Triangle>(_triangles);
+
+        /// <summary>
         /// Gets the <see cref="Vertex"/> at the given index.
         /// </summary>
         /// <param name="index">The index of the <see cref="Vertex"/>.</param>
@@ -113,6 +119,9 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 TryAddEdge(edgeIndices1, EdgeIndex.One);
                 TryAddEdge(edgeIndices2, EdgeIndex.Two);
                 TryAddEdge(edgeIndices3, EdgeIndex.Three);
+                _vertices[triangle.Index1].AddTriangle(triangle);
+                _vertices[triangle.Index2].AddTriangle(triangle);
+                _vertices[triangle.Index3].AddTriangle(triangle);
                 _triangles.Add(triangle);
             }
             HashSet<Edge> connectedEdges = new HashSet<Edge>();

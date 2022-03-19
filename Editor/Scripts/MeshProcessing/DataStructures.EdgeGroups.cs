@@ -17,6 +17,27 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
     }
 
     /// <summary>
+    /// Vertex information for an <see cref="EdgeGroup"/>, including a mapping from vertex indices to their index in the edge group list.
+    /// </summary>
+    internal class EdgeGroupVertexInformation
+    {
+        public EdgeGroupVertexInformation(Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary, MeshInformation meshInformation)
+        {
+            VertexEdgeGroupIndicesDictionary = vertexEdgeGroupIndicesDictionary;
+            MeshInformation = meshInformation;
+        }
+
+        /// <summary>
+        /// Dictionary mapping vertices' connected edges to their indices in the edge group list.
+        /// </summary>
+        public Dictionary<int, List<int>> VertexEdgeGroupIndicesDictionary { get; }
+        /// <summary>
+        /// The <see cref="MeshInformation"/>.
+        /// </summary>
+        public MeshInformation MeshInformation { get; }
+    }
+
+    /// <summary>
     /// A group of <see cref="Edge"/>s that consist of the boundary of a <see cref="DecoupledGrouping"/> of triangles that create a loop (cycle),
     /// along with indices marking important information for <see cref="TextureLabel"/> generation along that loop.
     /// </summary>

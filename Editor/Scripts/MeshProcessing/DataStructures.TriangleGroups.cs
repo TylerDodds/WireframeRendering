@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: © 2022 Tyler Dodds
 
 using System.Collections.Generic;
+using System.Linq;
 
 namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
 {
     /// <summary>
-    /// A group of <see cref="Triangle"/>s and their associated <see cref="Edge"/>s that form a group
-    /// that shares no edges with other triangles.
+    /// A group of <see cref="Triangle"/>s and their associated <see cref="Edge"/>s that form a decoupled group from other triangles.
     /// </summary>
     internal class DecoupledGrouping
     {
@@ -15,16 +15,23 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         public HashSet<Triangle> Triangles;
         /// <summary>The set of <see cref="Edge"/>s in the group.</summary>
         public HashSet<Edge> Edges;
+        /// <summary>The set of vertex indices in the group.</summary>
+        public HashSet<int> Vertices;
+        /// <summary>The <see cref="DecoupledGroupType"/>.</summary>
+        public DecoupledGroupType DecoupledGroupType;
 
         /// <summary>
         /// Creates a <see cref="DecoupledGrouping"/> with the given <paramref name="triangles"/> and <paramref name="edges"/>.
         /// </summary>
         /// <param name="triangles">The triangles of the grouping.</param>
         /// <param name="edges">The edges of the grouping.</param>
-        public DecoupledGrouping(HashSet<Triangle> triangles, HashSet<Edge> edges)
+        /// <param name="decoupledGroupType">The type of connection between triangles</param>
+        public DecoupledGrouping(HashSet<Triangle> triangles, HashSet<Edge> edges, DecoupledGroupType decoupledGroupType)
         {
             Triangles = triangles;
             Edges = edges;
+            Vertices = new HashSet<int>(triangles.SelectMany(t => t.GetIndices()));
+            DecoupledGroupType = decoupledGroupType;
         }
     }
 
@@ -43,5 +50,14 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             VertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges = vertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges;
             Edges = edges;
         }
+    }
+
+    /// <summary>
+    /// Describes the type of connection between triangles in a <see cref="DecoupledGrouping"/>.
+    /// </summary>
+    internal enum DecoupledGroupType
+    {
+        SharedEdges,
+        SharedVertices,
     }
 }

@@ -16,26 +16,89 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
     }
 
     /// <summary>
-    /// A struct contains four booleans.
+    /// A struct holding whether each of four texture labels is assigned.
     /// </summary>
-    internal struct FourBools
+    internal struct TextureLabelAssigned
     {
-        public bool x;
-        public bool y;
-        public bool z;
-        public bool w;
+        public bool First;
+        public bool Second;
+        public bool Third;
+        public bool Fourth;
 
-        public FourBools(bool x, bool y, bool z, bool w)
+        public TextureLabelAssigned(bool first, bool second, bool third, bool fourth)
         {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-            this.w = w;
+            First = first;
+            Second = second;
+            Third = third;
+            Fourth = fourth;
         }
 
-        public FourBools ComponentwiseAnd(FourBools other)
+        /// <summary>
+        /// Records the given <paramref name="textureLabel"/> as assigned.
+        /// </summary>
+        /// <param name="textureLabel">The <see cref="TextureLabel"/>.</param>
+        public void AddTextureLabel(TextureLabel textureLabel)
         {
-            return new FourBools(x && other.x, y && other.y, z && other.z, w && other.w);
+            switch (textureLabel)
+            {
+                case TextureLabel.First:
+                    First = true;
+                    break;
+                case TextureLabel.Second:
+                    Second = true;
+                    break;
+                case TextureLabel.Third:
+                    Third = true;
+                    break;
+                case TextureLabel.Fourth:
+                    Fourth = true;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Takes the component-wise And operation with the <paramref name="other"/>.
+        /// </summary>
+        /// <param name="other">The other value.</param>
+        /// <returns>The component-wise And operation.</returns>
+        public TextureLabelAssigned ComponentwiseAnd(TextureLabelAssigned other)
+        {
+            return new TextureLabelAssigned(First && other.First, Second && other.Second, Third && other.Third, Fourth && other.Fourth);
+        }
+
+        /// <summary>
+        /// Takes the component-wise Or operation with the <paramref name="other"/>.
+        /// </summary>
+        /// <param name="other">The other value.</param>
+        /// <returns>The component-wise Or operation.</returns>
+        public TextureLabelAssigned ComponentwiseOr(TextureLabelAssigned other)
+        {
+            return new TextureLabelAssigned(First || other.First, Second || other.Second, Third || other.Third, Fourth || other.Fourth);
+        }
+
+        /// <summary>
+        /// Takes the component-wise XOr operation with the <paramref name="other"/>.
+        /// </summary>
+        /// <param name="other">The other value.</param>
+        /// <returns>The component-wise XOr operation.</returns>
+        public TextureLabelAssigned ComponentwiseXOr(TextureLabelAssigned other)
+        {
+            return new TextureLabelAssigned(First ^ other.First, Second ^ other.Second, Third ^ other.Third, Fourth ^ other.Fourth);
+        }
+
+        /// <summary>
+        /// If all components are True.
+        /// </summary>
+        public bool All => First && Second && Third && Fourth;
+
+        /// <summary>
+        /// If any component is True.
+        /// </summary>
+        public bool Any => First || Second || Third || Fourth;
+
+        public override string ToString()
+        {
+            return $"{First} {Second} {Third} {Fourth}";
         }
     }
 

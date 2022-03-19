@@ -122,21 +122,31 @@ Haloing | If haloing effect is enabled.
 &nbsp;&nbsp; Haloing Width | The distance of haloing effect in pixels from in-front wireframe line.
 &nbsp;&nbsp; Stencil reference value (Advanced) | Reference value used by the stencil buffer to determine where in-front lines have been drawn.
 
-## Caveats
+## Model and Importing
 
-Works best on straight edges. Neighbouring edges with angles between them may
-show artifacts.
+This style of triangle-based edge rendering works best on straight edges.
+Neighbouring edges with angles between them may show slight artifacts.
 
 The underlying triangle structure of the mesh will affect how edges are drawn,
 particularly other triangles sharing a vertex with two adjacent wireframe edges.
 Experimenting with placement and topology of triangles can help to yield better
 results, particularly for non-straight edges or for Fresnel calculations.
 
-Requires wireframe edges to belong to only one triangle. In practical terms,
+Wireframe edges are defined to belong to only one triangle. In practical terms,
 this means that vertices of these edges must be considered logically distinct,
 whether split through sharp angle / edge splitting, uv or other seams, etc.
 This may also require ensure at least one subdivision of each surface of the
 model.
+
+Many of the geometry-related properties of the
+[model import settings](https://docs.unity3d.com/Manual/FBXImporter-Model.html)
+will affect whether vertices will be logically split on import.
+These include `Normals`, `Normals Mode`, `Smoothness Source`, `Smoothing Angle`,
+and `Tangents`. For low-poly style models, a good starting point might be to
+choose to `Import` normals with mode `Unweighted`, a smoothness source of `None`
+and `Calculate Mikktspace` tangents.
+
+## Caveats
 
 In some edge conditions (long boundary edge groups that contain many sharp
 angles, triangles containing two boundary edges, or triangles whose vertices

@@ -19,7 +19,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// <param name="mesh">The mesh to apply wireframe texture coordinates to.</param> 
         /// <param name="channel">The channel of the texture coordinates.</param>
         /// <param name="angleCutoffDegrees">Number of degrees between edges before they are considered to have different angles for wireframe texture generation.</param>
-        /// <param name="raiseWarning"
+        /// <param name="raiseWarning">Action to raise a warning message.</param>
         public void DecoupleDisconnectedPortions(Mesh mesh, int channel, float angleCutoffDegrees, Action<string> raiseWarning)
         {
             _meshInformation = new MeshInformation(mesh);
@@ -47,13 +47,13 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                     if (subMesh.topology == MeshTopology.Triangles)
                     {
                         _meshInformation.UpdateMeshInformation(submeshIndex);
-                        SetBoundaryUVs(channel, angleCutoffDegrees);
                     }
                     else
                     {
                         Debug.LogWarning($"Expected {MeshTopology.Triangles} for SubMesh {submeshIndex} of mesh {_meshInformation.Mesh.name}.");
                     }
                 }
+                SetBoundaryUVs(channel, angleCutoffDegrees);
             }
         }
 
@@ -69,29 +69,83 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             //Two triangles: edge is part of a mesh surface.
             //Three or more triangles: edge is involved in the intersection of two surfaces. Mesh is clearly not watertight. This is probably unexpected in most cases.
 
-            List<DecoupledGrouping> groupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(_meshInformation);
-            Dictionary<DecoupledGrouping, IReadOnlyList<IEdgeGroup>> edgeGroups = groupings.ToDictionary(g => g, g => EdgeTextureLabelUtilities.GetEdgeGroups(g, _meshInformation, angleCutoffDegrees, _raiseWarning))
-                .Where(pair => pair.Value != null).ToDictionary(pair => pair.Key, pair => pair.Value);
+            List<DecoupledGrouping> vertexSharedGroupings = TriangleGroupUtilities.GetDecoupledGroupings(_meshInformation, DecoupledGroupType.SharedVertices);
 
-            bool needThirdUvParameter = edgeGroups.Any(g => g.Value.Any(e => e.TextureLabel == TextureLabel.Third));
-            bool needFourthUvParameter = edgeGroups.Any(g => g.Value.Any(e => e.TextureLabel == TextureLabel.Fourth));
+            Dictionary<DecoupledGrouping, IReadOnlyList<IEdgeGroup>> allEdgeGroups = new Dictionary<DecoupledGrouping, IReadOnlyList<IEdgeGroup>>();
+            foreach (DecoupledGrouping vertexGrouping in vertexSharedGroupings)
+            {
+                List<DecoupledGrouping> groupings = TriangleGroupUtilities.GetDecoupledGroupings(_meshInformation, DecoupledGroupType.SharedEdges, vertexGrouping.Triangles);
+
+                Dictionary<int, int> numGroupsEachVertexIsIn = new Dictionary<int, int>();
+                foreach (DecoupledGrouping decoupledGrouping in groupings)
+                {
+                    foreach(int vertIndex in decoupledGrouping.Vertices)
+                    {
+                        if(!numGroupsEachVertexIsIn.ContainsKey(vertIndex))
+                        {
+                            numGroupsEachVertexIsIn[vertIndex] = 1;
+                        }
+                        else
+                        {
+                            numGroupsEachVertexIsIn[vertIndex] += 1;
+                        }
+                    }
+                }
+
+                HashSet<int> sharedVertices = new HashSet<int>(numGroupsEachVertexIsIn.Where(pair => pair.Value > 1).Select(pair => pair.Key));
+                IOrderedEnumerable<DecoupledGrouping> orderedGroupings = groupings.OrderByDescending(g => g.Vertices.Count(v => sharedVertices.Contains(v))).ThenBy(g => g.Edges.Count);
+                //NB This is just a rough ordering of groups that we want to solve. Groups that only have one shared vertex can be solved last, since they should be able to arrive
+                //at the same solution as if they had no shared vetex, just up to a permutation of the labels.
+                //Note that we'd need to do something like full backtracking over all possible labelings for the entire set of groupings to fully explore all possible solutions.
+                //Since cases requiring this are extremely unlikely, we'll leave this as a future improvement.
+
+                foreach (DecoupledGrouping decoupledGrouping in orderedGroupings)
+                {
+                    IReadOnlyList<IEdgeGroup> edgeGroups = EdgeTextureLabelUtilities.GetEdgeGroups(decoupledGrouping, _meshInformation, angleCutoffDegrees, _raiseWarning);
+                    if(edgeGroups != null)
+                    {
+                        foreach(IEdgeGroup edgeGroup in edgeGroups)
+                        {
+                            foreach(int vertexIndex in edgeGroup.Edges.SelectMany(e => e.GetIndices()).Distinct())
+                            {
+                                Vertex vertex = _meshInformation.GetVertex(vertexIndex);
+                                vertex.AddTextureLabel(edgeGroup.TextureLabel);
+                            }
+                        }
+                        allEdgeGroups[decoupledGrouping] = edgeGroups;
+                    }
+                }
+            }
+            
+
+            bool needThirdUvParameter = false;
+            bool needFourthUvParameter = false;
+            foreach (TextureLabel textureLabel in allEdgeGroups.SelectMany(groupPair => groupPair.Value).Select(group => group.TextureLabel))
+            {
+                needThirdUvParameter &= textureLabel == TextureLabel.Third;
+                needFourthUvParameter &= textureLabel == TextureLabel.Fourth;
+                if(needThirdUvParameter && needFourthUvParameter)
+                {
+                    break;
+                }
+            }
 
             if (!needThirdUvParameter && !needFourthUvParameter)
             {
                 List<Vector2> uvs = GetUV2s(channel);
-                SetBoundaryUVs(edgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));
+                SetBoundaryUVs(allEdgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));
                 _meshInformation.Mesh.SetUVs(channel, uvs);
             }
             else if (!needFourthUvParameter)
             {
                 List<Vector3> uvs = GetUV3s(channel);
-                SetBoundaryUVs(edgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));
+                SetBoundaryUVs(allEdgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));
                 _meshInformation.Mesh.SetUVs(channel, uvs);
             }
             else
             {
                 List<Vector4> uvs = GetUV4s(channel);
-                SetBoundaryUVs(edgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));
+                SetBoundaryUVs(allEdgeGroups, (label, index) => uvs[index] = AssignOneToLabelledTextureComponent(label, uvs[index]));
                 _meshInformation.Mesh.SetUVs(channel, uvs);
             }
         }

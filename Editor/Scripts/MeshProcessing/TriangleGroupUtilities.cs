@@ -12,13 +12,91 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
     internal static class TriangleGroupUtilities
     {
         /// <summary>
+        /// Determines the set of <see cref="DecoupledGrouping"/> of edges and triangles that do not share any common vertices or edges, depending on <paramref name="decoupledGroupType"/>.
+        /// </summary>
+        /// <param name="meshInformation">The mesh information.</param>
+        /// <param name="decoupledGroupType">The type of decoupling.</param>
+        /// <param name="trianglesInGroupings">Only these <see cref="Triangle"/> will be considered in the groupings.</param>
+        /// <returns>The set of <see cref="DecoupledGrouping"/>.</returns>
+        internal static List<DecoupledGrouping> GetDecoupledGroupings(MeshInformation meshInformation, DecoupledGroupType decoupledGroupType, IEnumerable<Triangle> trianglesInGroupings)
+        {
+            List<DecoupledGrouping> groups;
+            switch (decoupledGroupType)
+            {
+                case DecoupledGroupType.SharedEdges:
+                    groups = GetDecoupledGroupingsBasedOnConnectedEdges(meshInformation, trianglesInGroupings);
+                    break;
+                case DecoupledGroupType.SharedVertices:
+                    groups = GetDecoupledGroupingsBasedOnConnectedVertices(meshInformation, trianglesInGroupings);
+                    break;
+                default:
+                    groups = null;
+                    break;
+            }
+            return groups;
+        }
+
+        /// <summary>
+        /// Determines the set of <see cref="DecoupledGrouping"/> of edges and triangles that do not share any common vertices or edges, depending on <paramref name="decoupledGroupType"/>.
+        /// </summary>
+        /// <param name="meshInformation">The mesh information.</param>
+        /// <param name="decoupledGroupType">The type of decoupling.</param>
+        /// <returns>The set of <see cref="DecoupledGrouping"/>.</returns>
+        internal static List<DecoupledGrouping> GetDecoupledGroupings(MeshInformation meshInformation, DecoupledGroupType decoupledGroupType)
+        {
+            return GetDecoupledGroupings(meshInformation, decoupledGroupType, null);
+        }
+
+        /// <summary>
+        /// Determines the set of <see cref="DecoupledGrouping"/> of edges and triangles that do not share any common vertices.
+        /// </summary>
+        /// <param name="meshInformation">The mesh information.</param>
+        /// <param name="trianglesInGroupings">The <see cref="Triangle"/> in the groupings. If null, instead use the triangles from the <paramref name="meshInformation"/>.</param>
+        /// <returns>The set of <see cref="DecoupledGrouping"/>.</returns>
+        private static List<DecoupledGrouping> GetDecoupledGroupingsBasedOnConnectedVertices(MeshInformation meshInformation, IEnumerable<Triangle> trianglesInGroupings)
+        {
+            HashSet<Triangle> trianglesLeft = trianglesInGroupings != null ? new HashSet<Triangle>(trianglesInGroupings) : meshInformation.GetTriangles();
+            List<DecoupledGrouping> triangleGroupings = new List<DecoupledGrouping>();
+            while (trianglesLeft.Count > 0)
+            {
+                Triangle firstTriangle = trianglesLeft.First();
+                HashSet<Triangle> trianglesConnectedToTriangle = new HashSet<Triangle>();
+                void RemoveTrianglesConnectedByVertices(Triangle triangle)
+                {
+                    if (trianglesLeft.Contains(triangle))
+                    {
+                        trianglesLeft.Remove(triangle);
+                        foreach (int vertexIndex in triangle.GetIndices())
+                        {
+                            Vertex vertex = meshInformation.GetVertex(vertexIndex);
+                            foreach(Triangle connectedTriangle in vertex.GetTriangles())
+                            {
+                                if(!trianglesConnectedToTriangle.Contains(connectedTriangle))
+                                {
+                                    trianglesConnectedToTriangle.Add(connectedTriangle);
+                                    RemoveTrianglesConnectedByVertices(connectedTriangle);
+                                }
+                            }
+                        }
+                    }
+                }
+                RemoveTrianglesConnectedByVertices(firstTriangle);
+
+                HashSet<Edge> edgesInTriangles = new HashSet<Edge>(trianglesConnectedToTriangle.SelectMany(t => t));
+                triangleGroupings.Add(new DecoupledGrouping(trianglesConnectedToTriangle, edgesInTriangles, DecoupledGroupType.SharedVertices));
+            }
+            return triangleGroupings;
+        }
+
+        /// <summary>
         /// Determines the set of <see cref="DecoupledGrouping"/> of edges and triangles that do not share any common edges.
         /// </summary>
         /// <param name="meshInformation">The mesh information.</param>
+        /// <param name="trianglesInGroupings">The <see cref="Triangle"/> in the groupings. If null, instead use the triangles from the <paramref name="meshInformation"/>.</param>
         /// <returns>The set of <see cref="DecoupledGrouping"/>.</returns>
-        internal static List<DecoupledGrouping> GetDecoupledTriangleGroupings(MeshInformation meshInformation)
+        private static List<DecoupledGrouping> GetDecoupledGroupingsBasedOnConnectedEdges(MeshInformation meshInformation, IEnumerable<Triangle> trianglesInGroupings)
         {
-            HashSet<Edge> edgesLeft = meshInformation.GetEdges();
+            HashSet<Edge> edgesLeft = trianglesInGroupings != null ? new HashSet<Edge>(trianglesInGroupings.SelectMany(t => t)) : meshInformation.GetEdges();
             List<DecoupledGrouping> triangleGroupings = new List<DecoupledGrouping>();
             while (edgesLeft.Count > 0)
             {
@@ -46,7 +124,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 }
                 RemoveConnectedEdges(firstEdge);
 
-                triangleGroupings.Add(new DecoupledGrouping(trianglesConnectedToEdge, edgesConnectedToEdge));
+                triangleGroupings.Add(new DecoupledGrouping(trianglesConnectedToEdge, edgesConnectedToEdge, DecoupledGroupType.SharedEdges));
             }
             return triangleGroupings;
         }

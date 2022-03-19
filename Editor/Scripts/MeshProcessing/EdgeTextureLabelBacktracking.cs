@@ -17,19 +17,19 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// </summary>
         /// <param name="edgeGroups">The <see cref="EdgeGroup"/>s of the boundary cycle, in order.</param>
         /// <param name="groupCuts">The type of <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
-        /// <param name="vertexEdgeGroupIndicesDictionary">Dictionary mapping vertices' connected edges to their indices in <paramref name="edgeGroups"/> (if boundary edges).</param>
+        /// <param name="edgeGroupVertexInformation">The <see cref="EdgeGroupVertexInformation"/> for these <paramref name="edgeGroups"/>.</param>
         /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
         /// <param name="maxNumLabels">The maximum number of <see cref="TextureLabel"/> values (# of uv coordinates) to use.</param>
         /// <param name="partial">The partial solution assigning a <see cref="TextureLabel"/> to each <see cref="EdgeGroup"/>.</param>
         /// <param name="stopwatch">Stopwatch for time spent getting edge groups.</param>
         /// <returns>A list of <see cref="TextureLabel"/> per <see cref="EdgeGroup"/>, if one satisfies the constraints.</returns>
-        internal static BacktrackResults BacktrackTextureLabels(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary, BoundaryGrouping boundaryGrouping, int maxNumLabels, List<TextureLabel> partial, Stopwatch stopwatch)
+        internal static BacktrackResults BacktrackTextureLabels(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, EdgeGroupVertexInformation edgeGroupVertexInformation, BoundaryGrouping boundaryGrouping, int maxNumLabels, List<TextureLabel> partial, Stopwatch stopwatch)
         {
             if(BacktrackRejectTextureLabels(edgeGroups, groupCuts, boundaryGrouping.Edges.Count, partial))
             {
                 return new BacktrackResults(null, false);
             }
-            else if(BacktrackRejectIfTriangleHasAllOneLabel(edgeGroups, groupCuts, partial, vertexEdgeGroupIndicesDictionary, boundaryGrouping))
+            else if(BacktrackRejectIfTriangleHasAllOneLabelOrNewVertexLabelAssigned(edgeGroups, groupCuts, partial, edgeGroupVertexInformation, boundaryGrouping))
             {
                 return new BacktrackResults(null, true);
             }
@@ -52,7 +52,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 List<TextureLabel> extension = BacktrackGenerateFirstExtension(edgeGroups, partial);
                 while(extension != null)
                 {
-                    BacktrackResults backTracked = BacktrackTextureLabels(edgeGroups, groupCuts, vertexEdgeGroupIndicesDictionary, boundaryGrouping, maxNumLabels, extension, stopwatch);
+                    BacktrackResults backTracked = BacktrackTextureLabels(edgeGroups, groupCuts, edgeGroupVertexInformation, boundaryGrouping, maxNumLabels, extension, stopwatch);
                     if(backTracked.HasResult)
                     {
                         return backTracked;
@@ -101,14 +101,15 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
 
         /// <summary>
         /// Returns if the <paramref name="partial"/> solution should be rejected, based on if there are any triangles that would have all three vertices with a same TextureLabel assigned.
+        /// Also rejects if any vertex already had a <see cref="TextureLabel"/> assigned to it before solving for these <paramref name="edgeGroups"/>, and would have a new label assigned.
         /// </summary>
         /// <param name="edgeGroups">The <see cref="EdgeGroup"/>s of the boundary cycle, in order.</param>
         /// <param name="groupCuts">The type of <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
         /// <param name="partial">The partial solution assigning a <see cref="TextureLabel"/> to each <see cref="EdgeGroup"/>.</param>
-        /// <param name="vertexEdgeGroupIndicesDictionary">Dictionary mapping vertices' connected edges to their indices in <paramref name="edgeGroups"/> (if boundary edges).</param>
+        /// <param name="edgeGroupVertexInformation">The <see cref="EdgeGroupVertexInformation"/> for these <paramref name="edgeGroups"/>.</param>
         /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
         /// <returns>If the <paramref name="partial"/> solution should be rejected.</returns>
-        internal static bool BacktrackRejectIfTriangleHasAllOneLabel(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, List<TextureLabel> partial, Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary, BoundaryGrouping boundaryGrouping)
+        internal static bool BacktrackRejectIfTriangleHasAllOneLabelOrNewVertexLabelAssigned(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, List<TextureLabel> partial, EdgeGroupVertexInformation edgeGroupVertexInformation, BoundaryGrouping boundaryGrouping)
         {
             bool reject = false;
 
@@ -116,46 +117,47 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             {
                 int numPartial = partial.Count;
 
-                FourBools GetTextureLabelCoverage(int vertexIndex)
+                (TextureLabelAssigned Initial, TextureLabelAssigned Final) GetTextureLabelCoverage(int vertexIndex)
                 {
-                    FourBools labelCoverage = new FourBools();
-                    List<int> edgeGroupIndicesTouchingThisVertex = vertexEdgeGroupIndicesDictionary[vertexIndex];
+                    Vertex vertex = edgeGroupVertexInformation.MeshInformation.GetVertex(vertexIndex);
+                    TextureLabelAssigned initial = vertex.TextureLabelsAssigned;
+                    TextureLabelAssigned labelCoverage = initial;
+                    List<int> edgeGroupIndicesTouchingThisVertex = edgeGroupVertexInformation.VertexEdgeGroupIndicesDictionary[vertexIndex];
                     foreach (int edgeGroupIndex in edgeGroupIndicesTouchingThisVertex)
                     {
                         if (edgeGroupIndex < numPartial && edgeGroupIndex >= 0)
                         {
-                            switch (partial[edgeGroupIndex])
-                            {
-                                case TextureLabel.First:
-                                    labelCoverage.x = true;
-                                    break;
-                                case TextureLabel.Second:
-                                    labelCoverage.y = true;
-                                    break;
-                                case TextureLabel.Third:
-                                    labelCoverage.z = true;
-                                    break;
-                                case TextureLabel.Fourth:
-                                    labelCoverage.w = true;
-                                    break;
-                            }
+                            labelCoverage.AddTextureLabel(partial[edgeGroupIndex]);
                             //NB Won't do early-stopping in case all four components are true, since this is likely rare in most cases.
                         }
                     }
-                    return labelCoverage;
+                    return (initial, labelCoverage);
                 }
 
-                Dictionary<int, FourBools> vertexIndicesLabelCoverage = vertexEdgeGroupIndicesDictionary.ToDictionary(pair => pair.Key, pair => GetTextureLabelCoverage(pair.Key));
-                foreach(Triangle triangle in boundaryGrouping.TrianglesCompletelyTouchingBoundaryEdges)
+                Dictionary<int, (TextureLabelAssigned Initial, TextureLabelAssigned Final)> vertexIndicesLabelCoverage = edgeGroupVertexInformation.VertexEdgeGroupIndicesDictionary.ToDictionary(pair => pair.Key, pair => GetTextureLabelCoverage(pair.Key));
+                foreach(KeyValuePair<int, (TextureLabelAssigned Initial, TextureLabelAssigned Final)> pair in vertexIndicesLabelCoverage)
                 {
-                    FourBools firstCoverage = vertexIndicesLabelCoverage[triangle.Index1];
-                    FourBools secondCoverage = vertexIndicesLabelCoverage[triangle.Index2];
-                    FourBools thirdCoverage = vertexIndicesLabelCoverage[triangle.Index3];
-                    FourBools totalCoverage = firstCoverage.ComponentwiseAnd(secondCoverage).ComponentwiseAnd(thirdCoverage);
-                    if(totalCoverage.x || totalCoverage.y || totalCoverage.z || totalCoverage.w)
+                    (TextureLabelAssigned Initial, TextureLabelAssigned Final) = pair.Value;
+                    bool finalHasAssignedANewLabel = Initial.Any && Initial.ComponentwiseXOr(Final).Any;//Since we know that any components True in Initial will also be True in Final, we can use XOr here to check.
+                    if(finalHasAssignedANewLabel)
                     {
                         reject = true;
                         break;
+                    }
+                }
+                if (!reject)
+                {
+                    foreach (Triangle triangle in boundaryGrouping.TrianglesCompletelyTouchingBoundaryEdges)
+                    {
+                        TextureLabelAssigned firstCoverageFinal = vertexIndicesLabelCoverage[triangle.Index1].Final;
+                        TextureLabelAssigned secondCoverageFinal = vertexIndicesLabelCoverage[triangle.Index2].Final;
+                        TextureLabelAssigned thirdCoverageFinal = vertexIndicesLabelCoverage[triangle.Index3].Final;
+                        TextureLabelAssigned totalCoverageFinal = firstCoverageFinal.ComponentwiseAnd(secondCoverageFinal).ComponentwiseAnd(thirdCoverageFinal);
+                        if (totalCoverageFinal.Any)
+                        {
+                            reject = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -182,7 +184,6 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             }
             bool moreThanTwoEdges = numBoundaryEdges > 2;
             bool moreThanThreeEdges = numBoundaryEdges > 3;
-            bool lastGroupOnlyOneEdge = edgeGroups.Last().Edges.Count <= 1;
             int currentIndex = numPartial - 1;
             List<int> indicesToCheck = new List<int>() { currentIndex - 1 };
             if(currentIndex > 1 && edgeGroups[currentIndex - 1].Edges.Count <= 1)
@@ -206,7 +207,6 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                     //No restrictions on GroupCutType.Virtual
                     continue;
                 }
-                TextureLabel label = partial[indexToCheck];
                 int indexNext = PeriodicUtilities.GetIndexPeriodic(indexToCheck + 1, numEdgeGroups);
                 //Labels on neighbouring groups must be different for any GroupCutType except GroupCutType.Virtual
                 if (indexNext < numPartial && partial[indexNext] == partial[indexToCheck])
@@ -267,7 +267,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             /// </summary>
             public List<TextureLabel> Labels;
             /// <summary>
-            /// If any of the rejected partial solutions were due to <see cref="BacktrackRejectIfTriangleHasAllOneLabel(List{EdgeGroup}, List{GroupCutType}, List{TextureLabel}, Dictionary{Edge, int}, DecoupledGrouping, MeshInformation)"/>.
+            /// If any of the rejected partial solutions were due to triangle constraint (where all three vertices have a common texture coordinate assigned).
             /// </summary>
             public bool RejectedAnyBasedOnTriangles;
             /// <summary>

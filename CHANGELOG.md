@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.2] - 2022-03-19
+### Changed
+- Fix for wireframe texture coordinate generation when only vertices are shared between groups of triangles.
+
 ## [0.1.1] - 2022-03-17
 ### Changed
 - Improvement to wireframe texture coordinate generation correctness and performance.

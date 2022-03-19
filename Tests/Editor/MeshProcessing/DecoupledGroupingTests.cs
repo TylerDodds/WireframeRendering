@@ -18,7 +18,7 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
             Mesh mesh = MeshExamples.GetQuadMesh(1f, 1f);
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(mesh);
 
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = GetDecoupledGroupings(meshInformation);
             Assert.That(decoupledGroupings.Count == 1, "One Decoupled Grouping");
             DecoupledGrouping grouping = decoupledGroupings[0];
             Assert.That(grouping.Edges.Count == 5, "Five Edges");
@@ -32,7 +32,7 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
             Mesh mesh = MeshExamples.GetNonSeamCubeMesh();
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(mesh);
 
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = GetDecoupledGroupings(meshInformation);
             Assert.AreEqual(1, decoupledGroupings.Count, "# Decoupled Grouping");
             foreach (DecoupledGrouping grouping in decoupledGroupings)
             {
@@ -47,7 +47,7 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
             MeshLibrary meshHolder = MeshExamples.GetMeshLibrary();
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(meshHolder.BuiltInCube);
 
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = GetDecoupledGroupings(meshInformation);
             Assert.AreEqual(6, decoupledGroupings.Count, "# Decoupled Grouping");
             foreach (DecoupledGrouping grouping in decoupledGroupings)
             {
@@ -62,8 +62,11 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
             MeshLibrary meshHolder = MeshExamples.GetMeshLibrary();
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(meshHolder.BuiltInSphere.WithOnlyVerticesAndTriangles());
 
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledGroupings(meshInformation, DecoupledGroupType.SharedEdges);
             Assert.AreEqual(9, decoupledGroupings.Count, "# Decoupled Grouping");
+
+            decoupledGroupings = TriangleGroupUtilities.GetDecoupledGroupings(meshInformation, DecoupledGroupType.SharedVertices);
+            Assert.AreEqual(7, decoupledGroupings.Count, "# Decoupled Grouping");
         }
 
         ///<summary>Tests <see cref="DecoupledGrouping"/> generation for the built-in capsule.</summary>
@@ -73,7 +76,7 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
             MeshLibrary meshHolder = MeshExamples.GetMeshLibrary();
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(meshHolder.BuiltInCapsule.WithOnlyVerticesAndTriangles());
 
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = GetDecoupledGroupings(meshInformation);
             Assert.AreEqual(7, decoupledGroupings.Count, "# Decoupled Grouping");
         }
 
@@ -84,7 +87,7 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
             MeshLibrary meshHolder = MeshExamples.GetMeshLibrary();
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(meshHolder.BuiltInCylinder.WithOnlyVerticesAndTriangles());
 
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = GetDecoupledGroupings(meshInformation);
             Assert.AreEqual(5, decoupledGroupings.Count, "# Decoupled Grouping");
         }
 
@@ -95,7 +98,7 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
             MeshLibrary meshHolder = MeshExamples.GetMeshLibrary();
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(meshHolder.SmallCylinder);
 
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = GetDecoupledGroupings(meshInformation);
             Assert.AreEqual(3, decoupledGroupings.Count, "# Decoupled Grouping");
             decoupledGroupings = decoupledGroupings.OrderBy(g => g.Triangles.Count).ToList();
             AssertNumberEdgesTriangles(decoupledGroupings[0], 9, 4);
@@ -108,9 +111,26 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
         public void Circle1MeshDecoupledTest()
         {
             MeshInformation meshInformation = MeshHelper.GetMeshInformation(MeshExamples.GetMeshLibrary().Circle1);
-            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledTriangleGroupings(meshInformation);
+            List<DecoupledGrouping> decoupledGroupings = GetDecoupledGroupings(meshInformation);
             Assert.AreEqual(1, decoupledGroupings.Count, "Decoupled Grouping");
             AssertNumberEdgesTriangles(decoupledGroupings[0], 181, 110);
+        }
+
+        ///<summary>Tests <see cref="DecoupledGrouping"/> generation for the TwoTriangleBowtie example mesh.</summary>
+        [Test]
+        public void TwoTriangleBowtieMeshDecoupledTest()
+        {
+            MeshInformation meshInformation = MeshHelper.GetMeshInformation(MeshExamples.GetTwoTriangleBowtieMesh());
+            List<DecoupledGrouping> decoupledGroupings = TriangleGroupUtilities.GetDecoupledGroupings(meshInformation, DecoupledGroupType.SharedVertices);
+            Assert.AreEqual(1, decoupledGroupings.Count, "Decoupled Grouping");
+            AssertNumberEdgesTriangles(decoupledGroupings[0], 6, 2);
+
+            List<DecoupledGrouping> decoupledGroupings2 = TriangleGroupUtilities.GetDecoupledGroupings(meshInformation, DecoupledGroupType.SharedEdges);
+            Assert.AreEqual(2, decoupledGroupings2.Count, "Decoupled Grouping");
+            foreach(DecoupledGrouping decoupledGrouping in decoupledGroupings2)
+            {
+                AssertNumberEdgesTriangles(decoupledGrouping, 3, 1);
+            }
         }
 
         /// <summary>
@@ -123,6 +143,11 @@ namespace PixelinearAccelerator.WireframeRendering.EditorTests
         {
             Assert.AreEqual(numEdges, grouping.Edges.Count, "# Edges");
             Assert.AreEqual(numTriangles, grouping.Triangles.Count, "# Triangles");
+        }
+
+        private List<DecoupledGrouping> GetDecoupledGroupings(MeshInformation meshInformation)
+        {
+            return TriangleGroupUtilities.GetDecoupledGroupings(meshInformation, DecoupledGroupType.SharedEdges);
         }
     }
 }

@@ -16,15 +16,25 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// <summary>The Index of this Vertex.</summary>
         public int Index;
 
+        /// <summary>Whether each of the four texture labels has been assigned to this vertex.</summary>
+        public TextureLabelAssigned TextureLabelsAssigned => _textureLabelsAssigned;
+
+        private TextureLabelAssigned _textureLabelsAssigned = new TextureLabelAssigned(false, false, false, false);
         private HashSet<Edge> _edges = new HashSet<Edge>();
+        private HashSet<Triangle> _triangles = new HashSet<Triangle>();
 
         /// <summary>
         /// Creates a <see cref="Vertex"/> with the given index.
         /// </summary>
-        /// <param name="index"></param>
+        /// <param name="index">The vertex's index.</param>
         public Vertex(int index)
         {
             Index = index;
+        }
+
+        internal void AddTextureLabel(TextureLabel textureLabel)
+        {
+            _textureLabelsAssigned.AddTextureLabel(textureLabel);
         }
 
         /// <summary>Adds an <see cref="Edge"/> that contains this <see cref="Vertex"/>.</summary>
@@ -32,6 +42,19 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         internal void AddEdge(Edge edge)
         {
             _edges.Add(edge);
+        }
+
+        /// <summary>Adds an <see cref="Triangle"/> that contains this <see cref="Vertex"/>.</summary>
+        /// <param name="triangle">The <see cref="Triangle"/> to add.</param>
+        internal void AddTriangle(Triangle triangle)
+        {
+            _triangles.Add(triangle);
+        }
+
+        ///<summary>Returns an enumerator that iterates through the <see cref="Triangle"/>s that contain this <see cref="Vertex"/>.</summary>
+        public IEnumerable<Triangle> GetTriangles()
+        {
+            return _triangles;
         }
 
         ///<summary>Returns an enumerator that iterates through the <see cref="Edge"/>s that contain this <see cref="Vertex"/>.</summary>
@@ -52,7 +75,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
     }
 
     /// <summary>
-    /// An edge of a <see cref="Triangle"/ >in a mesh. Consists of two vertex indices, ordered so the smaller vertex index comes first.
+    /// An edge of a <see cref="Triangle"/> in a mesh. Consists of two vertex indices, ordered so the smaller vertex index comes first.
     /// </summary>
     internal class Edge : IEnumerable<Triangle>
     {

@@ -23,13 +23,14 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
 
             //Also set the uv channel for the WireframeRenderingFeatureSettings
             WireframeRenderingFeature feature = target as WireframeRenderingFeature;
-            WireframeRenderingFeatureSettings settings = feature.Settings;
-            SerializedObject serializedObject = new SerializedObject(feature);
-            SerializedProperty settingsProperty = serializedObject.FindProperty(nameof(feature.Settings));
+            using (SerializedObject serializedObject = new SerializedObject(feature))
+            {
+                SerializedProperty settingsProperty = serializedObject.FindProperty(nameof(feature.Settings));
 
-            SerializedProperty uvChannelProperty = settingsProperty.FindPropertyRelative("_uvChannel");
-            uvChannelProperty.intValue = WireframeRenderingSettings.Settings.UvChannel;
-            serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                SerializedProperty uvChannelProperty = settingsProperty.FindPropertyRelative("_uvChannel");
+                uvChannelProperty.intValue = WireframeRenderingSettings.Settings.UvChannel;
+                serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         public override void OnInspectorGUI()

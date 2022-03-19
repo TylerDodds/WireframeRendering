@@ -91,11 +91,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
             while(!edgeGroups.HasValue && !edgeGroups.CalculationTimedOut && groupCutEdgeIndices.Count > 0)
             {
                 int edgeIndexToRemove = GetEdgeIndexToRemove(groupCutEdgeIndices, edgeIndexToEdgeAngleDictionary);
-                int numElementsRemoved = groupCutEdgeIndices.RemoveAll(value => value.EdgeIndex == edgeIndexToRemove);
-                if(numElementsRemoved < 1)
-                {
-                    throw new System.InvalidOperationException($"Did not find a {nameof(EdgeGroup)} cut to remove from the {groupCutEdgeIndices.Count} possible.");
-                }
+                groupCutEdgeIndices.RemoveAll(value => value.EdgeIndex == edgeIndexToRemove);
 
                 edgeGroups = GetEdgeGroupsIncludingVirtualCuts(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation);
             }
@@ -164,11 +160,11 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// <param name="boundaryEdges">The list of boundary <see cref="Edge"/>s in a cycle.</param>
         /// <param name="groupCutEdgeIndices">The set of indices where <see cref="GroupCutType"/> are assigned to boundary loop edges.</param>
         /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
-        /// <param name="meshInformation">The <see cref="MeshInformation"/.></param>
+        /// <param name="meshInformation">The <see cref="MeshInformation"/>.</param>
         /// <param name="edgeGroups">The set of <see cref="EdgeGroup"/>s.</param>
         /// <param name="groupCuts">The <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
-        /// <param name="vertexEdgeGroupIndicesDictionary">Dictionary mapping vertices' connected edges to their indices in <paramref name="edgeGroups"/> (if boundary edges).</param>
-        private static void GetEdgeGroupsAndGroupCutTypes(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, BoundaryGrouping boundaryGrouping, MeshInformation meshInformation, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts, out Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary)
+        /// <param name="edgeGroupVertexInformation">The <see cref="EdgeGroupVertexInformation"/> for the <paramref name="edgeGroups"/>.</param>
+        private static void GetEdgeGroupsAndGroupCutTypes(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, BoundaryGrouping boundaryGrouping, MeshInformation meshInformation, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts, out EdgeGroupVertexInformation edgeGroupVertexInformation)
         {
             bool anyCuts = groupCutEdgeIndices.Any();
             int boundaryEdgesCount = boundaryEdges.Count;
@@ -193,7 +189,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 edgeGroups.Add(group);
             }
 
-            vertexEdgeGroupIndicesDictionary = new Dictionary<int, List<int>>();
+            Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary = new Dictionary<int, List<int>>();
 
             HashSet<int> distinctVertexIndicesOfTrianglesOnEdges = boundaryGrouping.VertexIndicesOfTrianglesCompletelyTouchingBoundaryEdges;
             if (distinctVertexIndicesOfTrianglesOnEdges.Any())
@@ -224,6 +220,8 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                     vertexEdgeGroupIndicesDictionary[vertexIndex] = edgeIndices;
                 }
             }
+
+            edgeGroupVertexInformation = new EdgeGroupVertexInformation(vertexEdgeGroupIndicesDictionary, meshInformation);
         }
 
         /// <summary>
@@ -247,11 +245,11 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
         /// <param name="meshInformation">The mesh information.</param>
         /// <param name="maxNumLabels">The maximum number of <see cref="TextureLabel"/> values (# of uv coordinates) to use.</param>
-        /// <returns>A list of <see cref="EdgeGroup"/>s with <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/>.</returns>
+        /// <returns>A list of <see cref="EdgeGroup"/>s with <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="groupCutEdgeIndices"/>.</returns>
         private static EdgeGroupResults GetEdgeGroupsIncludingVirtualCuts(List<Edge> boundaryEdges, List<GroupCutIndex> groupCutEdgeIndices, BoundaryGrouping boundaryGrouping, MeshInformation meshInformation, int maxNumLabels)
         {
-            GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts, out Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary);
-            EdgeTextureLabelBacktracking.BacktrackResults backtrackResults = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, vertexEdgeGroupIndicesDictionary, boundaryGrouping, maxNumLabels);
+            GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation, out List<EdgeGroup> edgeGroups, out List<GroupCutType> groupCuts, out EdgeGroupVertexInformation edgeGroupVertexInformation);
+            EdgeTextureLabelBacktracking.BacktrackResults backtrackResults = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, edgeGroupVertexInformation, boundaryGrouping, maxNumLabels);
             int numBoundaryEdges = boundaryEdges.Count;
 
             if (!backtrackResults.HasResult)
@@ -282,8 +280,8 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
 
                 //NB Need to reorder groupCutIndices, and note that groups will always start at zero, since it should always have cut at the last index (no matter which are added)
                 groupCutEdgeIndices.Sort((first, second) => first.EdgeIndex.CompareTo(second.EdgeIndex));
-                GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation, out edgeGroups, out groupCuts, out vertexEdgeGroupIndicesDictionary);
-                backtrackResults = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, vertexEdgeGroupIndicesDictionary, boundaryGrouping, maxNumLabels);
+                GetEdgeGroupsAndGroupCutTypes(boundaryEdges, groupCutEdgeIndices, boundaryGrouping, meshInformation, out edgeGroups, out groupCuts, out edgeGroupVertexInformation);
+                backtrackResults = GetTextureLabelsForFixedGroupCuts(edgeGroups, groupCuts, edgeGroupVertexInformation, boundaryGrouping, maxNumLabels);
             }
 
             if (backtrackResults.HasResult)
@@ -383,28 +381,28 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         }
 
         /// <summary>
-        /// Gets <see cref="BacktrackResults"/> with a list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/> with a fixed set of <paramref name="groupCuts"/>.
+        /// Gets <see cref="EdgeTextureLabelBacktracking.BacktrackResults"/> with a list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/> with a fixed set of <paramref name="groupCuts"/>.
         /// </summary>
         /// <param name="edgeGroups">The set of <see cref="EdgeGroup"/>s.</param>
         /// <param name="groupCuts">The <see cref="GroupCutType"/> from one <see cref="EdgeGroup"/> to the next.</param>
-        /// <param name="vertexEdgeGroupIndicesDictionary">Dictionary mapping vertices' connected edges to their indices in <paramref name="edgeGroups"/> (if boundary edges).</param>
+        /// <param name="edgeGroupVertexInformation">The <see cref="EdgeGroupVertexInformation"/> for the <paramref name="edgeGroups"/>.</param>
         /// <param name="boundaryGrouping">Boundary edges and triangles touching only boundary edge vertices.</param>
         /// <param name="maxNumLabels">The maximum number of <see cref="TextureLabel"/> values (# of uv coordinates) to use.</param>
-        /// <returns><see cref="BacktrackResults"/> with a list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/>.</returns>
-        private static EdgeTextureLabelBacktracking.BacktrackResults GetTextureLabelsForFixedGroupCuts(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, Dictionary<int, List<int>> vertexEdgeGroupIndicesDictionary, BoundaryGrouping boundaryGrouping, int maxNumLabels)
+        /// <returns><see cref="EdgeTextureLabelBacktracking.BacktrackResults"/> with a list of <see cref="TextureLabel"/>s that satisfy the constraints of the given <paramref name="edgeGroups"/>.</returns>
+        private static EdgeTextureLabelBacktracking.BacktrackResults GetTextureLabelsForFixedGroupCuts(List<EdgeGroup> edgeGroups, List<GroupCutType> groupCuts, EdgeGroupVertexInformation edgeGroupVertexInformation, BoundaryGrouping boundaryGrouping, int maxNumLabels)
         {
             List<TextureLabel> textureLabels = GroupSizesAtLeastTwoTextureLabels(edgeGroups, maxNumLabels);
             EdgeTextureLabelBacktracking.BacktrackResults backtrackResults = new EdgeTextureLabelBacktracking.BacktrackResults(textureLabels, false);
             if (backtrackResults.HasResult)
             {
-                backtrackResults.RejectedAnyBasedOnTriangles = EdgeTextureLabelBacktracking.BacktrackRejectIfTriangleHasAllOneLabel(edgeGroups, groupCuts, textureLabels, vertexEdgeGroupIndicesDictionary, boundaryGrouping);
+                backtrackResults.RejectedAnyBasedOnTriangles = EdgeTextureLabelBacktracking.BacktrackRejectIfTriangleHasAllOneLabelOrNewVertexLabelAssigned(edgeGroups, groupCuts, textureLabels, edgeGroupVertexInformation, boundaryGrouping);
             }
 
             if (!backtrackResults.HasResult)
             {
                 Stopwatch stopwatch = new Stopwatch();
                 stopwatch.Start();
-                backtrackResults = EdgeTextureLabelBacktracking.BacktrackTextureLabels(edgeGroups, groupCuts, vertexEdgeGroupIndicesDictionary, boundaryGrouping, maxNumLabels, new List<TextureLabel>() { TextureLabel.First }, stopwatch);
+                backtrackResults = EdgeTextureLabelBacktracking.BacktrackTextureLabels(edgeGroups, groupCuts, edgeGroupVertexInformation, boundaryGrouping, maxNumLabels, new List<TextureLabel>(), stopwatch);
             }
 
             return backtrackResults;
@@ -466,7 +464,6 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                 boundaryEdgeCycle = new BoundaryEdgeCycle();
 
                 Edge currEdge = startingEdge;
-                Edge prevEdge = currEdge;
                 int numBoundaryEdges = boundaryEdgesUnordered.Count;
                 HashSet<Edge> addedEdges = new HashSet<Edge>();
 
@@ -518,7 +515,6 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
                             }
                         }
 
-                        prevEdge = currEdge;
                         currEdge = connectedEdge;
                     }
                 }
