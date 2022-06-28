@@ -13,8 +13,10 @@ Two components are employed to perform the wireframe rendering:
 
 * A Renderer Feature designed for use with the
 Universal Render Pipeline (URP) Renderer.
-* Generated wireframe uv values that distinguish which edges should have
+* Additional information on mesh import. Choices include the following:
+  * Generated wireframe uv values that distinguish which edges should have
 wireframes drawn, done on model import.
+  * Additional generated mesh with line topology for use with a geometry shader.
 
 ## Installation instructions
 
@@ -29,7 +31,7 @@ Tested on Unity 2020.3 and URP 10.8.1.
 
 All settings and options can be found under `Tools > Wireframe Rendering`.
 
-Wireframe uv coordinates will be automatically generated for any models
+Wireframe mesh information will be automatically generated for any models
 imported in folders ending with `_Wireframe`
 (this suffix is configurable in the settings).
 

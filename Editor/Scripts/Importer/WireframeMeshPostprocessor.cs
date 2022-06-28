@@ -3,7 +3,9 @@
 
 using PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing;
 using PixelinearAccelerator.WireframeRendering.Editor.Settings;
-using System;
+using PixelinearAccelerator.WireframeRendering.Runtime.Enums;
+using PixelinearAccelerator.WireframeRendering.Runtime.Mesh;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -18,16 +20,16 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// <summary>
         /// Clears selected model importer wireframe user data.
         /// </summary>
-        [MenuItem(WireframeRenderingSettingsUtil.MenuPathClearUVInformation)]
-        internal static void ClearWireframeUVCoordinateInformationWithError()
+        [MenuItem(WireframeRenderingSettingsUtil.MenuPathClearWireframeInformation)]
+        internal static void ClearWireframeGenerationInformationWithError()
         {
             ModelImporter[] modelImporters = GetSelectedModelImporters();
             if (modelImporters.Length > 0)
             {
-                Undo.RecordObjects(modelImporters, WireframeRenderingSettingsUtil.MenuNameClearUVInformation);
+                Undo.RecordObjects(modelImporters, WireframeRenderingSettingsUtil.MenuNameClearWireframeInformation);
                 foreach (ModelImporter modelImporter in modelImporters)
                 {
-                    ClearWireframeUVCoordinateInformation(modelImporter, true, out _);
+                    ClearWireframeGenerationInformation(modelImporter, true, out _);
                 }
             }
         }
@@ -38,7 +40,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// <param name="modelImporter">The <see cref="ModelImporter"/>.</param>
         /// <param name="logErrorIfCannotParse">If Debug.LogError should be called when wireframe data cannot be parsed.</param>
         /// <param name="couldNotParse">If wireframe data couldn't be pared from <see cref="AssetImporter.userData"/>.</param>
-        internal static void ClearWireframeUVCoordinateInformation(ModelImporter modelImporter, bool logErrorIfCannotParse, out bool couldNotParse)
+        internal static void ClearWireframeGenerationInformation(ModelImporter modelImporter, bool logErrorIfCannotParse, out bool couldNotParse)
         {
             couldNotParse = false;
             if(modelImporter != null)
@@ -66,37 +68,19 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// <summary>
         /// Sets selected model to generate wireframe uv coordinates.
         /// </summary>
-        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetUvInformationGenerate)]
-        internal static void SetApplyWireframeUVCoordinates()
+        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetWireframeInformationGenerate)]
+        internal static void SetDoGenerateWireframeInformation()
         {
-            SetUseWireframeUVCoordinates(true, WireframeRenderingSettingsUtil.MenuNameSetUvInformationGenerate);
+            SetGenerateWireframeInformation(true, WireframeRenderingSettingsUtil.MenuNameSetWireframeWireframeInformationGenerate);
         }
 
         /// <summary>
         /// Sets selected model to not generate wireframe uv coordinates.
         /// </summary>
-        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetUvInformationDoNotGenerate)]
-        internal static void SetRemoveWireframeUVCoordinates()
+        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetWireframeInformationDoNotGenerate)]
+        internal static void SetDoNotGenerateWireframeInformation()
         {
-            SetUseWireframeUVCoordinates(false, WireframeRenderingSettingsUtil.MenuNameSetUvInformationDoNotGenerate);
-        }
-
-        /// <summary>
-        /// Tries to update wireframe information stored in the <paramref name="modelImporter"/>.
-        /// /// </summary>
-        /// <param name="channel">The new UV channel.</param>
-        /// <param name="modelImporter">The <see cref="ModelImporter"/>.</param>
-        /// <returns>If wireframe information was stored in the <paramref name="modelImporter"/> to be updated.</returns>
-        internal static bool TryUpdateWireframeInfo(int channel, ModelImporter modelImporter)
-        {
-            WireframeInfo wireframeInfo = GetWireframeInfoFromUserData(modelImporter, out bool couldNotParse);
-            if (!couldNotParse)
-            {
-                wireframeInfo.WireframeUvChannel = channel;
-                modelImporter.userData = JsonUtility.ToJson(wireframeInfo);
-                modelImporter.SaveAndReimport();
-            }
-            return !couldNotParse;
+            SetGenerateWireframeInformation(false, WireframeRenderingSettingsUtil.MenuNameSetWireframeInformationDoNotGenerate);
         }
 
         /// <summary>
@@ -107,7 +91,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// <returns>If uvs should be generated.</returns>
         internal static bool UseDirectoryForWireframe(string assetPath, string suffix)
         {
-            string directoryName = System.IO.Path.GetDirectoryName(assetPath);
+            string directoryName = Path.GetDirectoryName(assetPath);
             return !string.IsNullOrWhiteSpace(suffix) && directoryName.EndsWith(suffix);
         }
 
@@ -119,15 +103,15 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// <returns>The <see cref="WireframeInfo"/>.</returns>
         internal static WireframeInfo GetWireframeInfoFromUserData(AssetImporter assetImporter, out bool couldNotParse)
         {
-            return GetWireframeInfoFromUserData(assetImporter.userData, out couldNotParse);
+            return UserData.GetWireframeInfoFromUserData(assetImporter.userData, out couldNotParse);
         }
 
         /// <summary>
         /// Sets the userData if the model importer should use wireframe generation or not.
         /// </summary>
-        /// <param name="generateCoordinates">If UV coordinates should be geenerated.</param>
+        /// <param name="generateInformation">If wireframe information should be geenerated.</param>
         /// <param name="undoName">Name used for undo command.</param>
-        private static void SetUseWireframeUVCoordinates(bool generateCoordinates, string undoName)
+        private static void SetGenerateWireframeInformation(bool generateInformation, string undoName)
         {
             ModelImporter[] modelImporters = GetSelectedModelImporters();
             if (modelImporters.Length > 0)
@@ -135,16 +119,16 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                 Undo.RecordObjects(modelImporters, undoName);
                 foreach (ModelImporter modelImporter in modelImporters)
                 {
-                    if (generateCoordinates)
+                    if (generateInformation)
                     {
-                        SetUserDataToUseWireframeCoordinates(modelImporter);
+                        SetUserDataToGenerateWireframeInformation(modelImporter);
                     }
                     else
                     {
                         WireframeInfo wireframeInfo = GetWireframeInfoFromUserData(modelImporter, out bool couldNotParse);
-                        if (wireframeInfo.GenerateWireframeUvs || string.IsNullOrEmpty(modelImporter.userData))
+                        if (wireframeInfo.ShouldGenerate || string.IsNullOrEmpty(modelImporter.userData))
                         {
-                            wireframeInfo.GenerateWireframeUvs = false;
+                            wireframeInfo.ShouldGenerate = false;
                             modelImporter.userData = JsonUtility.ToJson(wireframeInfo);
                             modelImporter.SaveAndReimport();
                         }
@@ -167,11 +151,11 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// Sets the <see cref="AssetImporter.userData"/> to designate if the importer should generate wireframe uv coordinates.
         /// </summary>
         /// <param name="assetImporter">The <see cref="AssetImporter"/>.</param>
-        private static void SetUserDataToUseWireframeCoordinates(AssetImporter assetImporter)
+        private static void SetUserDataToGenerateWireframeInformation(AssetImporter assetImporter)
         {
             if (string.IsNullOrEmpty(assetImporter.userData))
             {
-                assetImporter.userData = JsonUtility.ToJson(GetNewWireframeInfo(true));
+                assetImporter.userData = JsonUtility.ToJson(UserData.GetNewWireframeInfo(true));
                 assetImporter.SaveAndReimport();
             }
             else
@@ -179,7 +163,10 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                 WireframeInfo wireframeInfo = GetWireframeInfoFromUserData(assetImporter, out bool couldNotParse);
                 if (!couldNotParse)
                 {
-                    wireframeInfo.GenerateWireframeUvs = true;
+                    if (!wireframeInfo.ShouldGenerate)
+                    {
+                        wireframeInfo.ShouldGenerate = true;
+                    }
                     assetImporter.userData = JsonUtility.ToJson(wireframeInfo);
                     assetImporter.SaveAndReimport();
                 }
@@ -197,12 +184,20 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         void OnPreprocessModel()
         {
             WireframeRenderingSettings wireframeRenderingSettings = WireframeRenderingSettings.Settings;
-            if (wireframeRenderingSettings.DoNotWeldVertices)
+            bool generateInformation = GetIfShouldGenerateWireframeInfo(wireframeRenderingSettings);
+            if (generateInformation)
             {
-                bool generateCoordinates = GetIfShouldGenerateWireframeCoordinates(wireframeRenderingSettings);
-                if (generateCoordinates)
+                switch (wireframeRenderingSettings.WireframeTypeToUse)
                 {
-                    (assetImporter as ModelImporter).weldVertices = false;
+                    case WireframeType.TextureCoordinates:
+                        if (wireframeRenderingSettings.DoNotWeldVertices)
+                        {
+                            (assetImporter as ModelImporter).weldVertices = false;
+                        }
+                        break;
+                    case WireframeType.GeometryShader:
+                        (assetImporter as ModelImporter).preserveHierarchy = true;
+                        break;
                 }
             }
         }
@@ -213,24 +208,92 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         void OnPostprocessModel(GameObject go)
         {
             WireframeRenderingSettings wireframeRenderingSettings = WireframeRenderingSettings.Settings;
-            bool generateCoordinates = GetIfShouldGenerateWireframeCoordinates(wireframeRenderingSettings);
-            if (generateCoordinates)
+            bool generateInformation = GetIfShouldGenerateWireframeInfo(wireframeRenderingSettings);
+            if (generateInformation)
             {
-                SetWireframeCoordinates(go, wireframeRenderingSettings.UvChannel, wireframeRenderingSettings.AngleCutoffDegrees);
+                switch(wireframeRenderingSettings.WireframeTypeToUse)
+                {
+                    case WireframeType.TextureCoordinates:
+                        SetWireframeCoordinates(go, wireframeRenderingSettings.UvChannel, wireframeRenderingSettings.AngleCutoffDegrees);
+                        break;
+                }
             }
         }
 
         /// <summary>
-        /// From the <paramref name="wireframeRenderingSettings"/>, determines if the current <see cref="ModelImporter"/> should have wireframe texture coordinates generated for it.
+        /// Generates a wireframe mesh asset if needed for the given path of an imported model.
+        /// </summary>
+        /// <param name="modelAssetPath">The asset path of the imported model.</param>
+        private static void GenerateWireframeMeshAssetIfNeeded(string modelAssetPath)
+        {
+            string assetGuid = AssetDatabase.AssetPathToGUID(modelAssetPath);
+
+            string[] wireframeGeneratedMeshHolderGuids = AssetDatabase.FindAssets($"t:{nameof(Runtime.Mesh.WireframeGeneratedMeshInfo)}");
+
+            bool alreadyGenerated = wireframeGeneratedMeshHolderGuids
+                .Select(g => AssetDatabase.GUIDToAssetPath(g))
+                .Select(p => AssetDatabase.LoadAssetAtPath<WireframeGeneratedMeshInfo>(p))
+                .Where(p => p != null)
+                .Any(w => w != null && w.ReferenceGuid.Equals(assetGuid));
+
+            if (!alreadyGenerated)
+            {
+                string newFileName = $"{Path.GetFileNameWithoutExtension(modelAssetPath)}_Wire{WireframeMeshScriptedImporter.FileExtension}";
+                string newPath = Path.Combine(Path.GetDirectoryName(modelAssetPath), newFileName);
+                newPath = AssetDatabase.GenerateUniqueAssetPath(newPath);
+
+                WireframeGeneratedMeshData wireframeGeneratedMesh = new WireframeGeneratedMeshData(assetGuid);
+                string json = JsonUtility.ToJson(wireframeGeneratedMesh);
+                File.WriteAllText(newPath, json);
+                AssetDatabase.ImportAsset(newPath);
+            }
+
+        }
+
+        /// <summary>
+        /// AssetPostprocessor message on postprocessing of all assets.
+        /// </summary>
+        static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
+        {
+            WireframeRenderingSettings wireframeRenderingSettings = WireframeRenderingSettings.Settings;
+            if(wireframeRenderingSettings.WireframeTypeToUse == WireframeType.GeometryShader)
+            {
+                AssetDatabase.StartAssetEditing();
+                foreach(string assetPath in importedAssets)
+                {
+                    if (GetIfShouldGenerateWireframeInfo(wireframeRenderingSettings, AssetImporter.GetAtPath(assetPath), assetPath))
+                    {
+                        //NB It seems that this needs to be done in OnPostprocessAllAssets so that AssetDatabase.FindAssets can find the dependent assets.
+                        GenerateWireframeMeshAssetIfNeeded(assetPath);
+                    }
+                }
+                AssetDatabase.StopAssetEditing();
+            }
+        }
+
+        /// <summary>
+        /// From the <paramref name="wireframeRenderingSettings"/>, determines if the current <see cref="ModelImporter"/> should have wireframe information generated for it.
         /// </summary>
         /// <param name="wireframeRenderingSettings">The <see cref="WireframeRenderingSettings"/>.</param>
         /// <returns>If wireframe texture coordinates should be generated.</returns>
-        private bool GetIfShouldGenerateWireframeCoordinates(WireframeRenderingSettings wireframeRenderingSettings)
+        private bool GetIfShouldGenerateWireframeInfo(WireframeRenderingSettings wireframeRenderingSettings)
+        {
+            return GetIfShouldGenerateWireframeInfo(wireframeRenderingSettings, assetImporter, assetPath);
+        }
+
+        /// <summary>
+        /// From the <paramref name="wireframeRenderingSettings"/>, determines if the current <see cref="ModelImporter"/> should have wireframe information generated for it.
+        /// </summary>
+        /// <param name="wireframeRenderingSettings">The <see cref="WireframeRenderingSettings"/>.</param>
+        /// <param name="assetImporter">The Asset Importer.</param>
+        /// <param name="assetPath">The asset path.</param>
+        /// <returns>If wireframe texture coordinates should be generated.</returns>
+        private static bool GetIfShouldGenerateWireframeInfo(WireframeRenderingSettings wireframeRenderingSettings, AssetImporter assetImporter, string assetPath)
         {
             bool generateCoordinates = false;
             if (assetImporter is ModelImporter)
             {
-                if (wireframeRenderingSettings.AllowUserConfigurationOfUvGeneration)
+                if (wireframeRenderingSettings.AllowUserConfigurationOfWireframeInfoGeneration)
                 {
                     WireframeInfo wireframeInfo = GetWireframeInfoFromUserData(assetImporter, out bool couldNotParse);
                     if (couldNotParse)
@@ -242,7 +305,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                     }
                     else
                     {
-                        if (wireframeInfo.GenerateWireframeUvs)
+                        if (wireframeInfo.ShouldGenerate)
                         {
                             generateCoordinates = true;
                         }
@@ -290,36 +353,6 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         }
 
         /// <summary>
-        /// Parses <see cref="WireframeInfo"/> from <see cref="AssetImporter.userData"/>.
-        /// </summary>
-        /// <param name="userData">The userData.</param>
-        /// <param name="couldNotParse">If parsing failed.</param>
-        /// <returns>The <see cref="WireframeInfo"/>.</returns>
-        private static WireframeInfo GetWireframeInfoFromUserData(string userData, out bool couldNotParse)
-        {
-            WireframeInfo info;
-            couldNotParse = false;
-            if (!string.IsNullOrEmpty(userData))
-            {
-                try
-                {
-                    info = JsonUtility.FromJson<WireframeInfo>(userData);
-                }
-                catch(ArgumentException)
-                {
-                    info = GetNewWireframeInfo(false);
-                    couldNotParse = true;
-                }
-            }
-            else
-            {
-                info = GetNewWireframeInfo(false);
-                couldNotParse = true;
-            }
-            return info;
-        }
-
-        /// <summary>
         /// A <see cref="WireframeTextureCoordinateGenerator"/> for generating wireframe uvs.
         /// </summary>
         private WireframeTextureCoordinateGenerator WireframeCoordinateGenerator
@@ -336,38 +369,15 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         private WireframeTextureCoordinateGenerator _wireframeCoordinateGenerator = null;
 
         /// <summary>
-        /// Gets a <see cref="WireframeInfo"/> using default UV channel settings.
-        /// </summary>
-        /// <param name="includeWireframeChannel">If wireframe channel should be included.</param>
-        /// <returns>A <see cref="WireframeInfo"/>.</returns>
-        private static WireframeInfo GetNewWireframeInfo(bool includeWireframeChannel) => new WireframeInfo(includeWireframeChannel, WireframeRenderingSettings.Settings.UvChannel);
-
-        /// <summary>
         /// Gets if user configuration is allowed based on <see cref="WireframeRenderingSettings"/>.
         /// </summary>
         /// <returns>If user configuration is allowed.</returns>
-        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetUvInformationGenerate, true)]
-        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetUvInformationDoNotGenerate, true)]
-        [MenuItem(WireframeRenderingSettingsUtil.MenuPathClearUVInformation, true)]
+        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetWireframeInformationGenerate, true)]
+        [MenuItem(WireframeRenderingSettingsUtil.MenuPathSetWireframeInformationDoNotGenerate, true)]
+        [MenuItem(WireframeRenderingSettingsUtil.MenuPathClearWireframeInformation, true)]
         private static bool IsUserConfigurationAllowed()
         {
-            return WireframeRenderingSettings.Settings.AllowUserConfigurationOfUvGeneration;
-        }
-
-        /// <summary>
-        /// Information about wireframe uv generation to be serialized as custom data for the asset importer.
-        /// </summary>
-        [Serializable]
-        internal struct WireframeInfo
-        {
-            public bool GenerateWireframeUvs;
-            public int WireframeUvChannel;
-
-            public WireframeInfo(bool addWireframeUvs, int uvChannel)
-            {
-                GenerateWireframeUvs = addWireframeUvs;
-                WireframeUvChannel = uvChannel;
-            }
+            return WireframeRenderingSettings.Settings.AllowUserConfigurationOfWireframeInfoGeneration;
         }
     }
 }

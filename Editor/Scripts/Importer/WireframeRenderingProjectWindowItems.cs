@@ -41,7 +41,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                     newContentColor.a = Mathf.Min(newContentColor.a, MinAlpha);
                     GUI.contentColor = newContentColor;
                     bool useDirectory = WireframeMeshPostprocessor.UseDirectoryForWireframe(path, settings.DirectorySuffixForAutomaticGeneration);
-                    WireframeMeshPostprocessor.WireframeInfo wireframeInfo = WireframeMeshPostprocessor.GetWireframeInfoFromUserData(modelImporter, out bool couldNotParse);
+                    WireframeInfo wireframeInfo = WireframeMeshPostprocessor.GetWireframeInfoFromUserData(modelImporter, out bool couldNotParse);
                     if (couldNotParse)
                     {
                         if (useDirectory)
@@ -51,7 +51,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                     }
                     else
                     {
-                        if (wireframeInfo.GenerateWireframeUvs)
+                        if (wireframeInfo.ShouldGenerate)
                         {
                             AddTextAtRight(selectionRect, DoGenerateText);
                         }

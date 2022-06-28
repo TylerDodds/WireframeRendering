@@ -12,6 +12,33 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
     internal class MeshInformation
     {
         /// <summary>
+        /// Creates a <see cref="MeshInformation"/> from the given <paramref name="mesh"/> and updates information for all submeshes, expecting <see cref="MeshTopology.Triangles"/>.
+        /// </summary>
+        /// <param name="mesh"></param>
+        /// <returns></returns>
+        public static MeshInformation CreateAndUpdateFromSubmeshTriangleTopology(Mesh mesh)
+        {
+            MeshInformation meshInformation = new MeshInformation(mesh);
+            if (meshInformation != null && meshInformation.Mesh != null)
+            {
+                int subMeshCount = meshInformation.Mesh.subMeshCount;
+                for (int submeshIndex = 0; submeshIndex < subMeshCount; submeshIndex++)
+                {
+                    UnityEngine.Rendering.SubMeshDescriptor subMesh = meshInformation.Mesh.GetSubMesh(submeshIndex);
+                    if (subMesh.topology == MeshTopology.Triangles)
+                    {
+                        meshInformation.UpdateMeshInformation(submeshIndex);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Expected {MeshTopology.Triangles} for SubMesh {submeshIndex} of mesh {meshInformation.Mesh.name}.");
+                    }
+                }
+            }
+            return meshInformation;
+        }
+
+        /// <summary>
         /// Constructor for <see cref="MeshInformation"/> from a <paramref name="mesh"/>.
         /// </summary>
         /// <param name="mesh">The <see cref="Mesh"/>.</param>

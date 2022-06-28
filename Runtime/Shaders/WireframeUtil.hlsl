@@ -6,6 +6,16 @@
 
 #pragma warning( disable: 4008 )
 
+//NB This is expected to be (eventually) in "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShaderVariablesFunctions.hlsl"
+float LinearDepthToEyeDepth(float rawDepth)
+{
+#if UNITY_REVERSED_Z
+	return _ProjectionParams.z - (_ProjectionParams.z - _ProjectionParams.y) * rawDepth;
+#else
+	return _ProjectionParams.y + (_ProjectionParams.z - _ProjectionParams.y) * rawDepth;
+#endif
+}
+
 //Safely normalize a float2. Will yield length < 1 for very small lengths, and 0 for value of (0,0).
 inline float2 SafeNormalize2(float2 value)
 {

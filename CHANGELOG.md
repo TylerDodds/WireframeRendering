@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.0] - 2022-06-28
+### Changed
+- Added wireframe rendering type using geometry shader based on line topology mesh import.
+
 ## [0.1.2] - 2022-03-19
 ### Changed
 - Fix for wireframe texture coordinate generation when only vertices are shared between groups of triangles.

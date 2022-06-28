@@ -83,6 +83,8 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         public int FirstIndex;
         /// <summary> Second vertex index. </summary>
         public int SecondIndex;
+        /// <summary> If the edge was initially constructed where the first index came before the second. </summary>
+        public bool Forwards { get; }
 
         /// <summary> The number of <see cref="Triangle"/>s that contain this <see cref="Edge"/>. </summary>
         public int TriangleCount => _triangles.Count;
@@ -91,9 +93,9 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
 
         public Edge(int v1, int v2)
         {
-            bool forwards = v2 >= v1;
-            FirstIndex = forwards ? v1 : v2;
-            SecondIndex = forwards ? v2 : v1;
+            Forwards = v2 >= v1;
+            FirstIndex = Forwards ? v1 : v2;
+            SecondIndex = Forwards ? v2 : v1;
         }
 
         /// <summary>Adds a <see cref="Triangle"/> that contains this <see cref="Edge"/>.</summary>

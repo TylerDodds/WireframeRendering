@@ -36,12 +36,29 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
         public float FalloffWidthPx = 1;
 
         /// <summary>
+        /// If segments should be rendered with overshoot.
+        /// </summary>
+        public bool Overshoot = false;
+
+        /// <summary>
+        /// The length of the wireframe overshoot in px.
+        /// </summary>
+        [Range(0, 100f)]
+        public float OvershootPx = 10f;
+
+        /// <summary>
+        /// The length of the wireframe overshoot in world space.
+        /// </summary>
+        [Range(0, 1f)]
+        public float OvershootWorld = 0.05f;
+
+        /// <summary>
         /// If the edge should be dashed.
         /// </summary>
         public bool Dash = false;
 
         /// <summary>
-        /// The length of the wireframe dash in px;
+        /// The length of the wireframe dash in px.
         /// </summary>
         [Range(0, 500f)]
         public float DashLengthPx = 200f;
@@ -95,6 +112,16 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
         /// If edge sizes should be done in world space.
         /// </summary>
         public bool WorldSpace = false;
+
+        /// <summary>
+        /// If object normals should be used.
+        /// </summary>
+        public bool UseObjectNormals = false;
+
+        /// <summary>
+        /// If contour edges should be shown.
+        /// </summary>
+        public bool ShowContourEdges = false;
 
         /// <summary>
         /// If a Fresnel-like edge should be drawn.

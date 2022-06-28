@@ -28,7 +28,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
         /// </summary>
         /// <param name="wireframeRenderingFeature">The <see cref="WireframeRenderingFeature"/>.</param>
         /// <param name="universalRenderPipelineAssets">A <see cref="List{UniversalRenderPipelineAsset}"/> to fill.</param>
-        internal static void FillPipelineAssetListsIfHasFeature(WireframeRenderingFeature wireframeRenderingFeature, List<UniversalRenderPipelineAsset> universalRenderPipelineAssets)
+        internal static void FillPipelineAssetListsIfHasFeature(WireframeRenderingFeature wireframeRenderingFeature, HashSet<UniversalRenderPipelineAsset> universalRenderPipelineAssets)
         {
             universalRenderPipelineAssets.Clear();
             string[] guids = AssetDatabase.FindAssets($"t:{nameof(UniversalRenderPipelineAsset)}");
@@ -38,8 +38,34 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
             {
                 TranverseRenderersForWireframeRenderingFeatures(asset, (sr, wrfs) =>
                 {
-                    universalRenderPipelineAssets.Add(asset);
-                }, true);
+                    if (wrfs.Contains(wireframeRenderingFeature))
+                    {
+                        universalRenderPipelineAssets.Add(asset);
+                    }
+                }, false);
+            }
+        }
+
+        /// <summary>
+        /// Fills a list of <see cref="ScriptableRenderer"/> that use the given <paramref name="wireframeRenderingFeature"/>.
+        /// </summary>
+        /// <param name="wireframeRenderingFeature">The <see cref="WireframeRenderingFeature"/>.</param>
+        /// <param name="scriptableRendererDatas">A <see cref="List{ScriptableRendererData}"/> to fill.</param>
+        internal static void FillScriptableRendererListIfHasFeature(WireframeRenderingFeature wireframeRenderingFeature, HashSet<ScriptableRendererData> scriptableRendererDatas)
+        {
+            scriptableRendererDatas.Clear();
+            string[] guids = AssetDatabase.FindAssets($"t:{nameof(ScriptableRendererData)}");
+            IEnumerable<string> paths = guids.Select(g => AssetDatabase.GUIDToAssetPath(g));
+            IEnumerable<ScriptableRendererData> assets = paths.Select(p => AssetDatabase.LoadAssetAtPath<ScriptableRendererData>(p)).Where(a => a != null);
+            foreach (ScriptableRendererData asset in assets)
+            {
+                TranverseRenderersForWireframeRenderingFeatures(asset, (wrfs) =>
+                {
+                    if (wrfs.Contains(wireframeRenderingFeature))
+                    {
+                        scriptableRendererDatas.Add(asset);
+                    }
+                });
             }
         }
 
@@ -93,6 +119,24 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                     {
                         break;
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Looks through the <paramref name="urpPiplineAsset"/> and performs <paramref name="onFoundFeaturesPerRenderer"/> action for each found <see cref="WireframeRenderingFeature"/>.
+        /// </summary>
+        /// <param name="urpPiplineAsset">A <see cref="UniversalRenderPipelineAsset"/>.</param>
+        /// <param name="onFoundFeaturesPerRenderer">The action to perform.</param>
+        private static void TranverseRenderersForWireframeRenderingFeatures(ScriptableRendererData scriptableRendererData, Action<WireframeRenderingFeature[]> onFoundFeaturesPerRenderer)
+        {
+            List<ScriptableRendererFeature> listOfFeatures = scriptableRendererData.rendererFeatures;
+            if (listOfFeatures != null)
+            {
+                WireframeRenderingFeature[] wireframeFeatures = listOfFeatures.OfType<WireframeRenderingFeature>().ToArray();
+                if (wireframeFeatures.Length > 0)
+                {
+                    onFoundFeaturesPerRenderer(wireframeFeatures);
                 }
             }
         }

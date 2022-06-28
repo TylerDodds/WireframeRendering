@@ -5,38 +5,39 @@ Shader "Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (From TexCoor
 {
 	Properties
 	{
+		[Header(Size)]
+		[Space]
 		_Width("Width", Range(0.0, 20.0)) = 10
 		_FalloffWidth("Falloff Width", Range(0.0, 1.0)) = 1
+
+		[Header(Space)]
+		[Space]
+		[Toggle(WIREFRAME_WORLD)]
+		_WorldSpaceReference("World Space Reference", Float) = 0
+		[Toggle(WIREFRAME_FRESNEL_EFFECT)]
+		_WireframeFresnelEffect("Edge Wireframe", Float) = 0
+
+		[Header(Appearance)]
+		[Space]
 		_EdgeColor("Edge Color", Color) = (.75, .75, .75, 1)
-
-		[Toggle(WIREFRAME_CLIP)]
-		_WireframeClip("Alpha Clip", Float) = 0
-		_WireframeCutoff("Alpha Clip Width", Range(0.0, 20.0)) = 5
-
 		[Toggle(WIREFRAME_DASH)]
 		_WireframeDash("Wireframe Dash", Float) = 0
 		_DashLength("Dash Length", Range(0.0, 500.)) = 200.
 		_EmptyLength("Empty Length", Range(0.0, 500.)) = 200.
-
 		[Toggle(WIREFRAME_TEXTURE)]
 		_ApplyTexture("Apply Texture", Float) = 0
-
 		_WireframeTex("Wireframe Texture", 2D) = "white" {}
-
 		_TexLength("Texture Length", Range(0.0, 500.)) = 200.
-
-		[Toggle(WIREFRAME_WORLD)]
-		_WorldSpaceReference("World Space Reference", Float) = 0
-
 		[Toggle(WIREFRAME_BEHIND_DEPTH_FADE)]
-		_BehindDepthFade("Fade FurtherBehind Objects", Float) = 0
-
+		_BehindDepthFade("Fade Further Behind Objects", Float) = 0
 		_DepthFadeDistance("Depth Fade Distance", Range(0.0, 50.)) = 10.
 
-		[Toggle(WIREFRAME_FRESNEL_EFFECT)]
-		_WireframeFresnelEffect("Edge Wireframe", Float) = 0
-
+		[Header(Culling)]
+		[Space]
 		[Enum(UnityEngine.Rendering.CullMode)] _Cull("Cull", Float) = 0
+		[Toggle(WIREFRAME_CLIP)]
+		_WireframeClip("Alpha Clip", Float) = 0
+		_WireframeCutoff("Alpha Clip Width", Range(0.0, 20.0)) = 5
 	}
 
 	CustomEditor "PixelinearAccelerator.WireframeRendering.Editor.CustomShaderGUI.WireframeRenderingShaderGUI"
@@ -193,16 +194,6 @@ Shader "Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (From TexCoor
 				OUT.wireframeUv = IN.wireframeUv;
 				// Returning the output.
 				return OUT;
-			}
-
-			//NB This is expected to be (eventually) in "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShaderVariablesFunctions.hlsl"
-			float LinearDepthToEyeDepth(float rawDepth)
-			{
-				#if UNITY_REVERSED_Z
-				return _ProjectionParams.z - (_ProjectionParams.z - _ProjectionParams.y) * rawDepth;
-				#else
-				return _ProjectionParams.y + (_ProjectionParams.z - _ProjectionParams.y) * rawDepth;
-				#endif
 			}
 
 			// The fragment shader definition.            

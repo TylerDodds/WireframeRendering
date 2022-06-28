@@ -22,39 +22,13 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing
         /// <param name="raiseWarning">Action to raise a warning message.</param>
         public void DecoupleDisconnectedPortions(Mesh mesh, int channel, float angleCutoffDegrees, Action<string> raiseWarning)
         {
-            _meshInformation = new MeshInformation(mesh);
             _raiseWarning = raiseWarning;
             if(_raiseWarning == null)
             {
                 _raiseWarning = w => { };
             }
-            DecoupleSubmeshPortions(channel, angleCutoffDegrees);
-        }
-
-        /// <summary>
-        /// Sets the wireframe texture coordinates based on boundary edges of decoupled portions of the mesh.
-        /// </summary>
-        /// <param name="angleCutoffDegrees">Number of degrees between edges before they are considered to have different angles for wireframe texture generation.</param>
-        /// <param name="channel">The channel of the texture coordinates.</param>
-        private void DecoupleSubmeshPortions(int channel, float angleCutoffDegrees)
-        {
-            if (_meshInformation != null && _meshInformation.Mesh != null)
-            {
-                int subMeshCount = _meshInformation.Mesh.subMeshCount;
-                for (int submeshIndex = 0; submeshIndex < subMeshCount; submeshIndex++)
-                {
-                    UnityEngine.Rendering.SubMeshDescriptor subMesh = _meshInformation.Mesh.GetSubMesh(submeshIndex);
-                    if (subMesh.topology == MeshTopology.Triangles)
-                    {
-                        _meshInformation.UpdateMeshInformation(submeshIndex);
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"Expected {MeshTopology.Triangles} for SubMesh {submeshIndex} of mesh {_meshInformation.Mesh.name}.");
-                    }
-                }
-                SetBoundaryUVs(channel, angleCutoffDegrees);
-            }
+            _meshInformation = MeshInformation.CreateAndUpdateFromSubmeshTriangleTopology(mesh);
+            SetBoundaryUVs(channel, angleCutoffDegrees);
         }
 
         /// <summary>

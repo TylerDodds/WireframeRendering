@@ -1,7 +1,7 @@
 {
   "name": "com.pixelinearaccelerator.wireframe-rendering",
   "description": "Wireframe Rendering mesh processing and Renderer Feature for URP.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "unity": "2020.3",
   "displayName": "Wireframe Rendering",
   "dependencies": 
