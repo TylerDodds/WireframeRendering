@@ -37,7 +37,7 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
         /// <summary>
         /// If in-behind wireframe should be done in the same pass as the front-face pass.
         /// </summary>
-        public bool BehindSamePassAsFront => InBehindWireframe && BehindLooksLikeFront && (WireframeType == WireframeType.GeometryShader || WireframeType == WireframeType.TextureCoordinates);
+        public bool BehindSamePassAsFront => InBehindWireframe && InFrontWireframe && BehindLooksLikeFront && (WireframeType.DrawSegmentsAsQuads() || WireframeType == WireframeType.TextureCoordinates);
 
         /// <summary>
         /// If in-behind wireframe should look the same as in-front wireframe for Geometry Shader type.

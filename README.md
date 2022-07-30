@@ -17,6 +17,7 @@ Universal Render Pipeline (URP) Renderer.
   * Generated wireframe uv values that distinguish which edges should have
 wireframes drawn, done on model import.
   * Additional generated mesh with line topology for use with a geometry shader.
+  * Additional generated mesh with quad per line segment when geometry shader is not available.
 
 ## Installation instructions
 

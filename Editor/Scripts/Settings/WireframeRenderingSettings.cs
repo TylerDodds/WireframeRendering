@@ -71,17 +71,17 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Settings
         public SingleLayer DefaultLayer = 0;
 
         /// <summary>
-        /// If object normals should be imported for <see cref="WireframeType.GeometryShader"/>.
+        /// If object normals should be imported when <see cref="WireframeTypeExtensions.DrawSegmentsAsQuads(WireframeType)"/>.
         /// </summary>
         public bool ImportObjectNormals = false;
 
         /// <summary>
-        /// If contour edge information should be imported for <see cref="WireframeType.GeometryShader"/>.
+        /// If contour edge information should be imported when <see cref="WireframeTypeExtensions.DrawSegmentsAsQuads(WireframeType)"/>.
         /// </summary>
         public bool ImportContourEdges = false;
 
         /// <summary>
-        /// The default weld distance for mesh importers for <see cref="WireframeType.GeometryShader"/>.
+        /// The default weld distance for mesh importers when <see cref="WireframeTypeExtensions.DrawSegmentsAsQuads(WireframeType)"/>.
         /// </summary>
         public float ImporterDefaultWeldDistance = 0.001f;
 
@@ -257,11 +257,14 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Settings
                     bool defaultLayerChanged = false;
                     bool importObjectNormalsChanged = false;
                     bool importContourEdgesChanged = false;
-                    if (settings.WireframeTypeToUse == WireframeType.GeometryShader)
+                    if (settings.WireframeTypeToUse.DrawSegmentsAsQuads())
                     {
-                        EditorGUILayout.LabelField("Geometry Shader Mesh Generation", largeLabelStyle);
+                        EditorGUILayout.LabelField("Line Segment Mesh Generation", largeLabelStyle);
                         EditorGUILayout.LabelField("Segment Generation", EditorStyles.boldLabel);
-                        EditorGUILayout.HelpBox("Importing additional segment information will prevent wireframe meshes from sharing vertices.", MessageType.None, true);
+                        if (settings.WireframeTypeToUse == WireframeType.GeometryShader)
+                        {
+                            EditorGUILayout.HelpBox("Importing additional segment information will prevent wireframe meshes from sharing vertices.", MessageType.None, true);
+                        }
                         EditorGUI.BeginChangeCheck();
                         EditorGUILayout.PropertyField(serializedSettings.FindProperty(nameof(settings.ImportObjectNormals)), new GUIContent("Import Normals", "Encodes object-space normals for potential use in aligning segments when rendering in world space."));
                         importObjectNormalsChanged = EditorGUI.EndChangeCheck();

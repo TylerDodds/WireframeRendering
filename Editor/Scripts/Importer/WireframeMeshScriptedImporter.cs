@@ -11,6 +11,7 @@ using PixelinearAccelerator.WireframeRendering.Runtime.Mesh;
 using PixelinearAccelerator.WireframeRendering.Editor.Settings;
 using PixelinearAccelerator.WireframeRendering.Runtime.Layer;
 using PixelinearAccelerator.WireframeRendering.Editor.MeshProcessing;
+using PixelinearAccelerator.WireframeRendering.Runtime.Enums;
 
 namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
 {
@@ -35,7 +36,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
             string json = File.ReadAllText(ctx.assetPath);
             WireframeGeneratedMeshData generatedMesh = JsonUtility.FromJson<WireframeGeneratedMeshData>(json);
             WireframeRenderingSettings wireframeSettings = WireframeRenderingSettings.Settings;
-            ImportFromReferenceAssetGuid(ctx, generatedMesh.ReferenceGuid, wireframeSettings.DefaultLayer, wireframeSettings.ImportObjectNormals, wireframeSettings.ImportContourEdges);
+            ImportFromReferenceAssetGuid(ctx, generatedMesh.ReferenceGuid, wireframeSettings.DefaultLayer, wireframeSettings.WireframeTypeToUse, wireframeSettings.ImportObjectNormals, wireframeSettings.ImportContourEdges);
         }
 
         /// <summary>
@@ -44,9 +45,10 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// <param name="ctx">The <see cref="AssetImportContext"/>.</param>
         /// <param name="guidString">The source model GUID as a string.</param>
         /// <param name="wireframeLayer">The <see cref="SingleLayer"/> used for the wireframe siblings.</param>
+        /// <param name="wireframeType">The wireframe rendering type.</param>
         /// <param name="importObjectNormals">If object-space normals should be imported.</param>
         /// <param name="importContourEdges">If contour edge information should be imported</param>
-        private void ImportFromReferenceAssetGuid(AssetImportContext ctx, string guidString, SingleLayer wireframeLayer, bool importObjectNormals, bool importContourEdges)
+        private void ImportFromReferenceAssetGuid(AssetImportContext ctx, string guidString, SingleLayer wireframeLayer, WireframeType wireframeType, bool importObjectNormals, bool importContourEdges)
         {
             string originalModelPath = AssetDatabase.GUIDToAssetPath(guidString);
 
@@ -60,7 +62,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                 MeshFilter[] originalMeshFilters = newGameObject.GetComponentsInChildren<MeshFilter>();
                 foreach(MeshFilter originalMeshFilter in originalMeshFilters)
                 {
-                    Mesh newMesh = GetLineSegmentMeshFromOriginal(originalMeshFilter.sharedMesh, _weldDistance, importObjectNormals, importContourEdges);
+                    Mesh newMesh = GetLineSegmentMeshFromOriginal(originalMeshFilter.sharedMesh, _weldDistance, wireframeType, importObjectNormals, importContourEdges);
                     ctx.AddObjectToAsset(newMesh.name, newMesh);
 
                     GameObject newMeshFilterGO = Instantiate(originalMeshFilter.gameObject, originalMeshFilter.transform.parent);
@@ -70,17 +72,28 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                     MeshRenderer newMeshRenderer = newMeshFilterGO.GetComponent<MeshRenderer>();
                     if (newMeshRenderer != null)
                     {
-                        Material existingMaterial = AssetDatabase.LoadAssetAtPath<Material>("Packages/com.pixelinearaccelerator.wireframe-rendering/Runtime/Materials/Placeholder Wireframe Material (Geometry Shader).mat");
+                        string materialPath = "Packages/com.pixelinearaccelerator.wireframe-rendering/Runtime/Materials/Placeholder Wireframe Material (Geometry Shader).mat";
+                        string shaderName = shaderName = "Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (Using Geometry Shader)";
+                        if(wireframeType == WireframeType.MeshQuads)
+                        {
+                            materialPath = "Packages/com.pixelinearaccelerator.wireframe-rendering/Runtime/Materials/Placeholder Wireframe Material (Mesh Quads).mat";
+                            shaderName = "Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (Using Mesh Quads)";
+                        }
+                        
+                        Material existingMaterial = string.IsNullOrEmpty(materialPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(materialPath);
                         if(existingMaterial != null)
                         {
                             newMeshRenderer.sharedMaterial = existingMaterial;
                         }
-                        else
+                        else if(!string.IsNullOrEmpty(shaderName))
                         {
-                            Material newMaterial = new Material(Shader.Find("Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (Using Geometry Shader)"));
-                            newMaterial.name = "Placeholder Wireframe Material";
-                            ctx.AddObjectToAsset(newMaterial.name, newMaterial);
-                            newMeshRenderer.sharedMaterial = newMaterial;
+                            Material newMaterial = new Material(Shader.Find(shaderName));
+                            if (newMaterial != null)
+                            {
+                                newMaterial.name = "Placeholder Wireframe Material";
+                                ctx.AddObjectToAsset(newMaterial.name, newMaterial);
+                                newMeshRenderer.sharedMaterial = newMaterial;
+                            }
                         }
                     }
                 }
@@ -108,10 +121,11 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         /// </summary>
         /// <param name="originalMesh">The original mesh.</param>
         /// <param name="epsilon">The distance at which positions are considered physically identical.</param>
+        /// <param name="wireframeType">The wireframe rendering type.</param>
         /// <param name="importObjectNormals">If object normals should be imported.</param>
         /// <param name="importContourEdges">If contour edge information should be imported</param>
         /// <returns>A wireframe edge mesh with <see cref="MeshTopology.Lines"/>.</returns>
-        private static Mesh GetLineSegmentMeshFromOriginal(Mesh originalMesh, float epsilon, bool importObjectNormals, bool importContourEdges)
+        private static Mesh GetLineSegmentMeshFromOriginal(Mesh originalMesh, float epsilon, WireframeType wireframeType, bool importObjectNormals, bool importContourEdges)
         {
             Mesh newMesh = new Mesh();
             newMesh.name = $"{originalMesh.name}_Wire";
@@ -124,7 +138,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
             List<Edge> boundaryEdges = originalMeshGroupings.SelectMany(g => g.Edges).Where(e => e.TriangleCount == 1).ToList();
 
             //NB Note that the implementations below do not do full, proper clustering of vertex positions, but instead use the first vertex as the anchor position for all vertices within epsilon
-            bool shareVertices = !(importObjectNormals || importContourEdges);
+            bool shareVertices = wireframeType == WireframeType.MeshQuads ? false : !(importObjectNormals || importContourEdges);
             if (shareVertices)
             {
                 Dictionary<int, int> originalVertexToFinalIndicesMapping = GetMappingOfOriginalToPhysicallyIdenticalVertexIndices(originalVertices, epsilon);
@@ -154,10 +168,29 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
             {
                 List<Edge> edgesToUse = importContourEdges ? originalMeshGroupings.SelectMany(g => g.Edges).ToList() : boundaryEdges;
                 List<SegmentAndNormals> physicallyDistinctEdges = GetPhysicallyDistinctSegments(originalVertices, edgesToUse, epsilon);
-                List<Vector3> vertexPositions = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.Start, e.End }).ToList();
-                List<Vector3> vertexNormals = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.Normal, e.Normal}).ToList();
-                List<Vector3> faceNormals = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.FaceNormal1, e.FaceNormal2}).ToList();
-                List<int> segmentIndices = Enumerable.Range(0, vertexPositions.Count).ToList();
+                MeshTopology meshTopology;
+                List<Vector3> vertexPositions, vertexNormals, faceNormals, otherVertexes, otherFaceNormals;
+                List<int> segmentIndices;
+                if (wireframeType == WireframeType.MeshQuads)
+                {
+                    meshTopology = MeshTopology.Triangles;
+                    vertexPositions = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.Start, e.End, e.Start, e.End }).ToList();
+                    vertexNormals = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.Normal, e.Normal, e.Normal, e.Normal }).ToList();
+                    faceNormals = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.FaceNormal1, e.FaceNormal2, e.FaceNormal1, e.FaceNormal2 }).ToList();
+                    segmentIndices = Enumerable.Range(0, vertexPositions.Count / 4).Select(i => i * 4).SelectMany(i => new int[] {i, i+1, i+2, i+1, i+3, i+2 }).ToList();
+                    otherVertexes = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.End, e.Start, e.End, e.Start }).ToList();
+                    otherFaceNormals = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.FaceNormal2, e.FaceNormal1, e.FaceNormal2, e.FaceNormal1 }).ToList();
+                }
+                else
+                {
+                    meshTopology = MeshTopology.Lines;
+                    vertexPositions = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.Start, e.End }).ToList();
+                    vertexNormals = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.Normal, e.Normal }).ToList();
+                    faceNormals = physicallyDistinctEdges.SelectMany(e => new Vector3[] { e.FaceNormal1, e.FaceNormal2 }).ToList();
+                    segmentIndices = Enumerable.Range(0, vertexPositions.Count).ToList();
+                    otherVertexes = null;
+                    otherFaceNormals = null;
+                }
 
                 newMesh.SetVertices(vertexPositions);
                 if (importObjectNormals)
@@ -167,8 +200,16 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                 if (importContourEdges)
                 {
                     newMesh.SetUVs(0, faceNormals);
+                    if(otherFaceNormals != null)
+                    {
+                        newMesh.SetUVs(2, otherFaceNormals);
+                    }
                 }
-                newMesh.SetIndices(segmentIndices, MeshTopology.Lines, 0);
+                if(otherVertexes != null)
+                {
+                    newMesh.SetUVs(1, otherVertexes);
+                }
+                newMesh.SetIndices(segmentIndices, meshTopology, 0);
             }
             return newMesh;
         }

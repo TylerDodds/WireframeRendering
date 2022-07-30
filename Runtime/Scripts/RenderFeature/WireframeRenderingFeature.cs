@@ -30,6 +30,9 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
                 case WireframeType.GeometryShader:
                     InitializeGeometryShaderMaterialFrontBackPasses();
                     break;
+                case WireframeType.MeshQuads:
+                    InitializeMeshQuadsMaterialFrontBackPasses();
+                    break;
                 case WireframeType.None:
                 default:
                     InitializeNoWireframeFrontBackPasses();
@@ -49,31 +52,48 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
         }
 
         /// <summary>
+        /// Initializes <see cref="_inFrontMaterial"/>, <see cref="_inBehindMaterial"/>, <see cref="_wireframePassBehind"/> and <see cref="_wireframePassInFront"/> when using mesh quads shader.
+        /// </summary>
+        private void InitializeMeshQuadsMaterialFrontBackPasses()
+        {
+            InitializeDrawSegmentsWithQuadMaterialFrontBackPasses("Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (Using Mesh Quads)");
+        }
+
+        /// <summary>
         /// Initializes <see cref="_inFrontMaterial"/>, <see cref="_inBehindMaterial"/>, <see cref="_wireframePassBehind"/> and <see cref="_wireframePassInFront"/> when using geometry shader.
         /// </summary>
         private void InitializeGeometryShaderMaterialFrontBackPasses()
         {
-            Shader wireframeGeometryShader = Shader.Find("Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (Using Geometry Shader)");
+            InitializeDrawSegmentsWithQuadMaterialFrontBackPasses("Hidden/PixelinearAccelerator/Wireframe/URP Wireframe Unlit (Using Geometry Shader)");
+        }
+
+        /// <summary>
+        /// Initializes <see cref="_inFrontMaterial"/>, <see cref="_inBehindMaterial"/>, <see cref="_wireframePassBehind"/> and <see cref="_wireframePassInFront"/> when drawing mesh line segments as quads.
+        /// </summary>
+        /// <param name="shaderName">The shader's name.</param>
+        private void InitializeDrawSegmentsWithQuadMaterialFrontBackPasses(string shaderName)
+        {
+            Shader wireframeQuadShader = Shader.Find(shaderName);
             _inFrontMaterial = null;
             _inBehindMaterial = null;
             _wireframePassInFront = null;
             _wireframePassBehind = null;
-            if (wireframeGeometryShader != null)
+            if (wireframeQuadShader != null)
             {
                 Vector4 ndcOutsideViewFactors = new Vector4(Settings.ViewportEdgeWidthTaperStart, Settings.ViewportEdgeWidthTaperEnd, Settings.ViewportEdgeAlphaFadeStart, Settings.ViewportEdgeAlphaFadeEnd);
                 if (Settings.InFrontWireframe)
                 {
-                    _inFrontMaterial = new Material(wireframeGeometryShader);
+                    _inFrontMaterial = new Material(wireframeQuadShader);
                     float haloingWidth = Settings.FrontSettings.WorldSpace ? Settings.HaloingWidthWorld : Settings.HaloingWidthPx;
                     InFrontBehindType inFrontBehindType = Settings.BehindSamePassAsFront ? InFrontBehindType.All : InFrontBehindType.InFront;
                     bool depthFade = Settings.BehindSamePassAsFront ? Settings.BehindDepthFade : false;
                     float depthFadeDistance = Settings.BehindSamePassAsFront ? Settings.DepthFadeDistance : 0f;
-                    ConfigureWireframeGeometryMaterial(_inFrontMaterial, Settings.FrontSettings, inFrontBehindType, Settings.Haloing, haloingWidth, depthFade, depthFadeDistance, Settings.InFrontDepthCutoff, ndcOutsideViewFactors);
+                    ConfigureWireframeDrawSegmentsAsQuadsMaterial(_inFrontMaterial, Settings.FrontSettings, inFrontBehindType, Settings.Haloing, haloingWidth, depthFade, depthFadeDistance, Settings.InFrontDepthCutoff, ndcOutsideViewFactors);
                 }
                 if (Settings.InBehindWireframe && ! Settings.BehindSamePassAsFront)
                 {
-                    _inBehindMaterial = new Material(wireframeGeometryShader);
-                    ConfigureWireframeGeometryMaterial(_inBehindMaterial, Settings.BehindSettings, InFrontBehindType.Behind, false, 0f, Settings.BehindDepthFade, Settings.DepthFadeDistance, Settings.InFrontDepthCutoff, ndcOutsideViewFactors);
+                    _inBehindMaterial = new Material(wireframeQuadShader);
+                    ConfigureWireframeDrawSegmentsAsQuadsMaterial(_inBehindMaterial, Settings.BehindSettings, InFrontBehindType.Behind, false, 0f, Settings.BehindDepthFade, Settings.DepthFadeDistance, Settings.InFrontDepthCutoff, ndcOutsideViewFactors);
                 }
             }
 
@@ -188,7 +208,7 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
         }
 
         /// <summary>
-        /// Configuers a wireframe shader material (using geometry shader method) from the given settings.
+        /// Configuers a wireframe shader material (using using shader that draws segments as quads) from the given settings.
         /// </summary>
         /// <param name="material">The material.</param>
         /// <param name="edgeSettings">The settings.</param>
@@ -199,7 +219,7 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
         /// <param name="inFrontBehindType">Type of depth rendering used by material.</param>
         /// <param name="inFrontDepthCutoff">Depth cutoff between in-front and behind objects rendering.</param>
         /// <param name="ndcOutsideViewFactors">NDC outside view fractions to start and end falloff of width and alpha.</param>
-        private void ConfigureWireframeGeometryMaterial(Material material, WireframeEdgeSettings edgeSettings, InFrontBehindType inFrontBehindType, bool haloing, float haloingWidth, bool behindDepthFade, float depthFadeDistance, float inFrontDepthCutoff, Vector4 ndcOutsideViewFactors)
+        private void ConfigureWireframeDrawSegmentsAsQuadsMaterial(Material material, WireframeEdgeSettings edgeSettings, InFrontBehindType inFrontBehindType, bool haloing, float haloingWidth, bool behindDepthFade, float depthFadeDistance, float inFrontDepthCutoff, Vector4 ndcOutsideViewFactors)
         {
             material.SetColor("_EdgeColor", edgeSettings.Color);
             if (edgeSettings.WorldSpace)
@@ -240,7 +260,7 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.RenderFeature
                 material.SetFloat("_OvershootLength", edgeSettings.OvershootPx);
             }
 
-            if(Settings.WireframeType == WireframeType.GeometryShader)
+            if(Settings.WireframeType.DrawSegmentsAsQuads())
             {
                 bool useObjectNormals = !(Settings.ObjectNormalsImported && edgeSettings.WorldSpace) ? false : edgeSettings.UseObjectNormals;
                 SetMaterialKeyword(material, "WIREFRAME_USE_OBJECT_NORMALS", useObjectNormals);

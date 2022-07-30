@@ -16,6 +16,7 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.Enums
         Default = 1,
         TextureCoordinates = 2,
         GeometryShader = 3,
+        MeshQuads = 4,
     }
 
     /// <summary>
@@ -29,6 +30,13 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.Enums
         /// <param name="wireframeType">The wireframe generation type.</param>
         /// <returns>If the value is <see cref="WireframeType.None"/>.</returns>
         public static bool IsNone(this WireframeType wireframeType) => wireframeType == WireframeType.None;
+
+        /// <summary>
+        /// Gets if the wireframe type involves rendering line segments as quads.
+        /// </summary>
+        /// <param name="wireframeType">The wireframe generation type.</param>
+        /// <returns>If the value is <see cref="WireframeType.None"/>.</returns>
+        public static bool DrawSegmentsAsQuads(this WireframeType wireframeType) => wireframeType == WireframeType.GeometryShader || wireframeType == WireframeType.MeshQuads;
 
         /// <summary>
         /// Resolves <see cref="WireframeType.Default"/> based on expected system support.
@@ -45,7 +53,7 @@ namespace PixelinearAccelerator.WireframeRendering.Runtime.Enums
                 }
                 else
                 {
-                    wireframeType = WireframeType.TextureCoordinates;
+                    wireframeType = WireframeType.MeshQuads;
                 }
             }
             return wireframeType;

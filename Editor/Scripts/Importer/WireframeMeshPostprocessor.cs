@@ -196,6 +196,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
                         }
                         break;
                     case WireframeType.GeometryShader:
+                    case WireframeType.MeshQuads:
                         (assetImporter as ModelImporter).preserveHierarchy = true;
                         break;
                 }
@@ -256,7 +257,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.Importer
         static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
             WireframeRenderingSettings wireframeRenderingSettings = WireframeRenderingSettings.Settings;
-            if(wireframeRenderingSettings.WireframeTypeToUse == WireframeType.GeometryShader)
+            if(wireframeRenderingSettings.WireframeTypeToUse.DrawSegmentsAsQuads())
             {
                 AssetDatabase.StartAssetEditing();
                 foreach(string assetPath in importedAssets)

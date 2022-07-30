@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.1] - 2022-07-29
+### Changed
+- Added wireframe rendering type using mesh import with one quad per line segment.
+
 ## [0.2.0] - 2022-06-28
 ### Changed
 - Added wireframe rendering type using geometry shader based on line topology mesh import.

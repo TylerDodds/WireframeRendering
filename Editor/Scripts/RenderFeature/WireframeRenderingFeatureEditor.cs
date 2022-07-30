@@ -62,7 +62,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
             {
                 EditorGUILayout.EnumPopup(nameof(feature.Settings.WireframeType), feature.Settings.WireframeType);
             }
-            if (settings.WireframeType == WireframeType.GeometryShader)
+            if (settings.WireframeType.DrawSegmentsAsQuads())
             {
                 using (new IndentLevel())
                 {
@@ -74,7 +74,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
             using (new EditorGUI.DisabledScope(SetLayerMaskFromOverallWireframeRenderingSettings))
             {
                 EditorGUILayout.PropertyField(settingsProperty.FindPropertyRelative(nameof(settings.LayerMask)));
-                if (settings.WireframeType == WireframeType.GeometryShader)
+                if (settings.WireframeType.DrawSegmentsAsQuads())
                 {
                     using (new IndentLevel())
                     {
@@ -91,7 +91,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                 }
             }
 
-            if (feature.Settings.WireframeType == WireframeType.GeometryShader)
+            if (settings.WireframeType.DrawSegmentsAsQuads())
             {
                 using (new EditorGUI.DisabledScope(true))
                 {
@@ -113,9 +113,9 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
             EditorGUILayout.Space();
 
             EditorGUILayout.PropertyField(settingsProperty.FindPropertyRelative(nameof(settings.InBehindWireframe)));
-            if (settings.WireframeType == WireframeType.TextureCoordinates|| settings.WireframeType == WireframeType.GeometryShader)
+            if (settings.WireframeType == WireframeType.TextureCoordinates || settings.WireframeType.DrawSegmentsAsQuads())
             {
-                if (settings.InBehindWireframe)
+                if (settings.InBehindWireframe && settings.InFrontWireframe)
                 {
                     EditorGUILayout.PropertyField(settingsProperty.FindPropertyRelative(nameof(settings.BehindLooksLikeFront)), new GUIContent("Behind Looks Like In-Front"));
                 }
@@ -156,7 +156,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                         {
                             EditorGUILayout.PropertyField(settingsProperty.FindPropertyRelative(nameof(settings.HaloingWidthPx)));
                         }
-                        else if(settings.WireframeType == WireframeType.GeometryShader)
+                        else if(settings.WireframeType.DrawSegmentsAsQuads())
                         {
                             if(settings.FrontSettings.WorldSpace)
                             {
@@ -167,7 +167,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                                 EditorGUILayout.PropertyField(settingsProperty.FindPropertyRelative(nameof(settings.HaloingWidthPx)));
                             }
                         }
-                        if (settings.WireframeType == WireframeType.TextureCoordinates || settings.WireframeType == WireframeType.GeometryShader)
+                        if (settings.WireframeType == WireframeType.TextureCoordinates || settings.WireframeType.DrawSegmentsAsQuads())
                         {
                             _haloingAdvancedFoldout = EditorGUILayout.ToggleLeft("Advanced Options", _haloingAdvancedFoldout);
                             if (_haloingAdvancedFoldout)
@@ -182,7 +182,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                 }
             }
 
-            if(settings.WireframeType == WireframeType.GeometryShader)
+            if(settings.WireframeType.DrawSegmentsAsQuads())
             {
                 EditorGUILayout.Space();
                 _geometryAdvancedFoldout = EditorGUILayout.Foldout(_geometryAdvancedFoldout, "Advanced", true);
@@ -278,7 +278,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                 EditorGUILayout.PropertyField(serializedProperty.FindPropertyRelative(nameof(edgeSettings.WidthPx)));
             }
             EditorGUILayout.PropertyField(serializedProperty.FindPropertyRelative(nameof(edgeSettings.FalloffWidthPx)));
-            if(wireframeType == WireframeType.GeometryShader)
+            if(wireframeType.DrawSegmentsAsQuads())
             {
                 EditorGUILayout.PropertyField(serializedProperty.FindPropertyRelative(nameof(edgeSettings.Overshoot)));
                 if (edgeSettings.Overshoot)
@@ -333,7 +333,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                     }
                 }
             }
-            if(wireframeType == WireframeType.GeometryShader)
+            if(wireframeType.DrawSegmentsAsQuads())
             {
                 if(contourEdgesImported)
                 {
@@ -341,7 +341,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
                 }
             }
             EditorGUILayout.PropertyField(serializedProperty.FindPropertyRelative(nameof(edgeSettings.WorldSpace)));
-            if(wireframeType == WireframeType.GeometryShader)
+            if(wireframeType.DrawSegmentsAsQuads())
             {
                 if(edgeSettings.WorldSpace && objectNormalsImported)
                 {
@@ -362,7 +362,7 @@ namespace PixelinearAccelerator.WireframeRendering.Editor.RenderFeature
         /// </summary>
         private static bool SetLayerMaskFromOverallWireframeRenderingSettings
         {
-            get => WireframeRenderingSettings.Settings.WireframeTypeToUse == WireframeType.GeometryShader;
+            get => WireframeRenderingSettings.Settings.WireframeTypeToUse.DrawSegmentsAsQuads();
         }
 
         /// <summary>
